@@ -7,186 +7,140 @@ import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.sanedge.category.domain.requests.FindCategoryMonthTotalPriceById;
+import com.sanedge.category.domain.requests.FindCategoryYearTotalPriceById;
 import com.sanedge.category.domain.requests.MonthTotalPriceCategory;
 import com.sanedge.category.domain.requests.YearTotalPriceCategory;
-import com.sanedge.common.domain.response.ApiResponse;
 import com.sanedge.category.domain.response.CategoriesMonthlyTotalPriceResponse;
 import com.sanedge.category.domain.response.CategoriesYearlyTotalPriceResponse;
 import com.sanedge.category.repository.statsbyid.CategoryTotalPriceByIdRepository;
 import com.sanedge.category.service.statsbyid.CategoryTotalPriceByIdService;
+import com.sanedge.common.domain.response.ApiResponse;
+import com.sanedge.common.observability.TracingMetrics;
 
-import io.opentelemetry.api.OpenTelemetry;
-import io.opentelemetry.api.common.AttributeKey;
 import io.opentelemetry.api.common.Attributes;
-import io.opentelemetry.api.metrics.DoubleHistogram;
-import io.opentelemetry.api.metrics.LongCounter;
-import io.opentelemetry.api.metrics.Meter;
-import io.opentelemetry.api.trace.Span;
-import io.opentelemetry.api.trace.SpanKind;
-import io.opentelemetry.api.trace.StatusCode;
-import io.opentelemetry.api.trace.Tracer;
 import io.smallrye.mutiny.Uni;
+import io.quarkus.hibernate.reactive.panache.common.WithTransaction;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
 @ApplicationScoped
 public class CategoryTotalPriceByIdServiceImpl implements CategoryTotalPriceByIdService {
-    private static final Logger logger = LoggerFactory.getLogger(CategoryTotalPriceByIdServiceImpl.class);
+        private static final Logger logger = LoggerFactory.getLogger(CategoryTotalPriceByIdServiceImpl.class);
 
-    CategoryTotalPriceByIdRepository categoryTotalPriceByIdRepository;
-    OpenTelemetry openTelemetry;
+        private final CategoryTotalPriceByIdRepository categoryTotalPriceByIdRepository;
+        private final TracingMetrics tracingMetrics;
 
-    private final Tracer tracer;
-    private final LongCounter requestsTotal;
-    private final DoubleHistogram requestDurationSeconds;
-
-    @Inject
-    public CategoryTotalPriceByIdServiceImpl(CategoryTotalPriceByIdRepository categoryTotalPriceByIdRepository, OpenTelemetry openTelemetry) {
-        this.categoryTotalPriceByIdRepository = categoryTotalPriceByIdRepository;
-        this.openTelemetry = openTelemetry;
-        this.tracer = openTelemetry.getTracer("category-total-price-by-id-service", "1.0.0");
-        Meter meter = openTelemetry.getMeter("category-total-price-by-id-service");
-
-        this.requestsTotal = meter.counterBuilder("requests_total")
-                .setDescription("Total number of requests")
-                .build();
-        this.requestDurationSeconds = meter.histogramBuilder("request_duration_seconds")
-                .setDescription("Request duration in seconds")
-                .setUnit("s")
-                .build();
-    }
-
-    @Override
-    public Uni<ApiResponse<List<CategoriesMonthlyTotalPriceResponse>>> findMonthlyTotalPriceById(MonthTotalPriceCategory req) {
-        long startTime = System.currentTimeMillis();
-        Span span = tracer.spanBuilder("findMonthlyTotalPriceById")
-                .setSpanKind(SpanKind.SERVER)
-                .setAttribute("service.name", "category-total-price-by-id-service")
-                .setAttribute("operation", "find_monthly_total_price_by_id")
-                .setAttribute("category.id", req.getCategoryId() != null ? req.getCategoryId().toString() : "null")
-                .setAttribute("category.year", req.getYear() != null ? req.getYear().toString() : "null")
-                .setAttribute("category.month", req.getMonth() != null ? req.getMonth().toString() : "null")
-                .startSpan();
-
-        if (req.getCategoryId() == null || req.getYear() == null || req.getMonth() == null) {
-            logger.error("❌ CategoryId, Year or Month is null | req: {}", req);
-            span.setStatus(StatusCode.ERROR, "CategoryId, Year and Month must not be null");
-            requestsTotal.add(1, Attributes.of(
-                    AttributeKey.stringKey("operation"), "find_monthly_total_price_by_id",
-                    AttributeKey.stringKey("status"), "failed",
-                    AttributeKey.stringKey("error_type"), "invalid_argument"));
-            span.end();
-            return Uni.createFrom().item(new ApiResponse<>("error", "CategoryId, Year and Month must not be null", List.of()));
+        @Inject
+        public CategoryTotalPriceByIdServiceImpl(CategoryTotalPriceByIdRepository categoryTotalPriceByIdRepository,
+                        TracingMetrics tracingMetrics) {
+                this.categoryTotalPriceByIdRepository = categoryTotalPriceByIdRepository;
+                this.tracingMetrics = tracingMetrics;
         }
 
-        logger.info("📊 Fetching monthly total price by category | CategoryId: {}, Year: {}, Month: {}",
-                req.getCategoryId(), req.getYear(), req.getMonth());
+        @Override
+        @WithTransaction
+        public Uni<ApiResponse<List<CategoriesMonthlyTotalPriceResponse>>> findMonthlyTotalPriceById(
+                        MonthTotalPriceCategory req) {
+                if (req.getCategoryId() == null || req.getYear() == null || req.getMonth() == null) {
+                        logger.error("CategoryId, Year or Month is null | req: {}", req);
+                        return Uni.createFrom().item(new ApiResponse<>("error",
+                                        "CategoryId, Year and Month must not be null", List.of()));
+                }
 
-        LocalDate currentMonth = LocalDate.of(req.getYear(), req.getMonth(), 1);
-        LocalDate nextMonth = currentMonth.plusMonths(1);
+                logger.info("Fetching monthly total price by category | CategoryId: {}, Year: {}, Month: {}",
+                                req.getCategoryId(), req.getYear(), req.getMonth());
+                Attributes attrs = Attributes.builder()
+                                .put("category.id", req.getCategoryId().toString())
+                                .put("category.year", req.getYear().toString())
+                                .put("category.month", req.getMonth().toString())
+                                .build();
 
-        return categoryTotalPriceByIdRepository.findMonthlyTotalPriceByCategoryId(
-                req.getCategoryId().longValue(),
-                req.getYear(),
-                req.getMonth(),
-                nextMonth.getYear(),
-                nextMonth.getMonthValue())
-                .map(results -> {
-                    List<CategoriesMonthlyTotalPriceResponse> response = results.stream()
-                            .map(CategoriesMonthlyTotalPriceResponse::from)
-                            .collect(Collectors.toList());
+                LocalDate currentMonth = LocalDate.of(req.getYear(), req.getMonth(), 1);
+                LocalDate nextMonth = currentMonth.plusMonths(1);
 
-                    span.setAttribute("stats.count", response.size());
-                    span.setStatus(StatusCode.OK);
+                return runTraced("findMonthlyTotalPriceById", "find_monthly_total_price_by_id", attrs,
+                                () -> {
+                                        FindCategoryMonthTotalPriceById dreq = new FindCategoryMonthTotalPriceById();
+                                        dreq.setCategoryId(req.getCategoryId().longValue());
+                                        dreq.setStartYear(req.getYear());
+                                        dreq.setStartMonth(req.getMonth());
+                                        dreq.setEndYear(nextMonth.getYear());
+                                        dreq.setEndMonth(nextMonth.getMonthValue());
 
-                    requestsTotal.add(1, Attributes.of(
-                            AttributeKey.stringKey("operation"), "find_monthly_total_price_by_id",
-                            AttributeKey.stringKey("status"), "success"));
+                                        return categoryTotalPriceByIdRepository.findMonthlyTotalPriceByCategoryId(dreq)
+                                                .map(results -> {
+                                                        List<CategoriesMonthlyTotalPriceResponse> response = results
+                                                                        .stream()
+                                                                        .map(CategoriesMonthlyTotalPriceResponse::from)
+                                                                        .collect(Collectors.toList());
 
-                    logger.info("✅ Found {} monthly total price stats for categoryId {}", response.size(), req.getCategoryId());
-                    return ApiResponse.success("Monthly total price by category retrieved successfully", response);
-                })
-                .onFailure().recoverWithItem(e -> {
-                    logger.error("💥 Failed to fetch monthly total price by category | CategoryId: {}, Year: {}, Month: {}",
-                            req.getCategoryId(), req.getYear(), req.getMonth(), e);
-                    span.recordException(e);
-                    span.setStatus(StatusCode.ERROR, e.getMessage());
-
-                    requestsTotal.add(1, Attributes.of(
-                            AttributeKey.stringKey("operation"), "find_monthly_total_price_by_id",
-                            AttributeKey.stringKey("status"), "failed",
-                            AttributeKey.stringKey("error_type"), e.getClass().getSimpleName()));
-
-                    return new ApiResponse<>("error", "Failed to fetch monthly total price by category", List.of());
-                })
-                .eventually(() -> {
-                    span.end();
-                    double duration = (System.currentTimeMillis() - startTime) / 1000.0;
-                    requestDurationSeconds.record(duration, Attributes.of(
-                            AttributeKey.stringKey("operation"), "find_monthly_total_price_by_id"));
-                });
-    }
-
-    @Override
-    public Uni<ApiResponse<List<CategoriesYearlyTotalPriceResponse>>> findYearlyTotalPriceById(YearTotalPriceCategory req) {
-        long startTime = System.currentTimeMillis();
-        Span span = tracer.spanBuilder("findYearlyTotalPriceById")
-                .setSpanKind(SpanKind.SERVER)
-                .setAttribute("service.name", "category-total-price-by-id-service")
-                .setAttribute("operation", "find_yearly_total_price_by_id")
-                .setAttribute("category.id", req.getCategoryId() != null ? req.getCategoryId().toString() : "null")
-                .setAttribute("category.year", req.getYear() != null ? req.getYear().toString() : "null")
-                .startSpan();
-
-        if (req.getCategoryId() == null || req.getYear() == null) {
-            logger.error("❌ CategoryId or Year is null | req: {}", req);
-            span.setStatus(StatusCode.ERROR, "CategoryId and Year must not be null");
-            requestsTotal.add(1, Attributes.of(
-                    AttributeKey.stringKey("operation"), "find_yearly_total_price_by_id",
-                    AttributeKey.stringKey("status"), "failed",
-                    AttributeKey.stringKey("error_type"), "invalid_argument"));
-            span.end();
-            return Uni.createFrom().item(new ApiResponse<>("error", "CategoryId and Year must not be null", List.of()));
+                                                        logger.info("Found {} monthly total price stats for categoryId {}",
+                                                                        response.size(), req.getCategoryId());
+                                                        return ApiResponse.success(
+                                                                        "Monthly total price by category retrieved successfully",
+                                                                        response);
+                                                })
+                                                .onFailure().recoverWithItem(e -> {
+                                                        logger.error("Failed to fetch monthly total price by category | CategoryId: {}, Year: {}, Month: {}",
+                                                                        req.getCategoryId(), req.getYear(),
+                                                                        req.getMonth(), e);
+                                                        return new ApiResponse<List<CategoriesMonthlyTotalPriceResponse>>("error",
+                                                                        "Failed to fetch monthly total price by category",
+                                                                        List.of());
+                                                });
+                                });
         }
 
-        logger.info("📊 Fetching yearly total price by category | CategoryId: {}, Year: {}", req.getCategoryId(), req.getYear());
+        @Override
+        @WithTransaction
+        public Uni<ApiResponse<List<CategoriesYearlyTotalPriceResponse>>> findYearlyTotalPriceById(
+                        YearTotalPriceCategory req) {
+                if (req.getCategoryId() == null || req.getYear() == null) {
+                        logger.error("CategoryId or Year is null | req: {}", req);
+                        return Uni.createFrom().item(
+                                        new ApiResponse<>("error", "CategoryId and Year must not be null", List.of()));
+                }
 
-        return categoryTotalPriceByIdRepository.findYearlyTotalPriceByCategoryId(
-                req.getCategoryId().longValue(),
-                req.getYear(),
-                req.getYear() - 1)
-                .map(results -> {
-                    List<CategoriesYearlyTotalPriceResponse> response = results.stream()
-                            .map(CategoriesYearlyTotalPriceResponse::from)
-                            .collect(Collectors.toList());
+                logger.info("Fetching yearly total price by category | CategoryId: {}, Year: {}", req.getCategoryId(),
+                                req.getYear());
+                Attributes attrs = Attributes.builder()
+                                .put("category.id", req.getCategoryId().toString())
+                                .put("category.year", req.getYear().toString())
+                                .build();
 
-                    span.setAttribute("stats.count", response.size());
-                    span.setStatus(StatusCode.OK);
+                return runTraced("findYearlyTotalPriceById", "find_yearly_total_price_by_id", attrs,
+                                () -> {
+                                        FindCategoryYearTotalPriceById dreq = new FindCategoryYearTotalPriceById();
+                                        dreq.setCategoryId(req.getCategoryId().longValue());
+                                        dreq.setYear(req.getYear());
+                                        dreq.setYearMinusOne(req.getYear() - 1);
 
-                    requestsTotal.add(1, Attributes.of(
-                            AttributeKey.stringKey("operation"), "find_yearly_total_price_by_id",
-                            AttributeKey.stringKey("status"), "success"));
+                                        return categoryTotalPriceByIdRepository.findYearlyTotalPriceByCategoryId(dreq)
+                                                .map(results -> {
+                                                        List<CategoriesYearlyTotalPriceResponse> response = results
+                                                                        .stream()
+                                                                        .map(CategoriesYearlyTotalPriceResponse::from)
+                                                                        .collect(Collectors.toList());
 
-                    logger.info("✅ Found {} yearly total price stats for categoryId {}", response.size(), req.getCategoryId());
-                    return ApiResponse.success("Yearly total price by category retrieved successfully", response);
-                })
-                .onFailure().recoverWithItem(e -> {
-                    logger.error("💥 Failed to fetch yearly total price by category | CategoryId: {}, Year: {}", req.getCategoryId(), req.getYear(), e);
-                    span.recordException(e);
-                    span.setStatus(StatusCode.ERROR, e.getMessage());
+                                                        logger.info("Found {} yearly total price stats for categoryId {}",
+                                                                        response.size(), req.getCategoryId());
+                                                        return ApiResponse.success(
+                                                                        "Yearly total price by category retrieved successfully",
+                                                                        response);
+                                                })
+                                                .onFailure().recoverWithItem(e -> {
+                                                        logger.error("Failed to fetch yearly total price by category | CategoryId: {}, Year: {}",
+                                                                        req.getCategoryId(), req.getYear(), e);
+                                                        return new ApiResponse<List<CategoriesYearlyTotalPriceResponse>>("error",
+                                                                        "Failed to fetch yearly total price by category",
+                                                                        List.of());
+                                                });
+                                });
+        }
 
-                    requestsTotal.add(1, Attributes.of(
-                            AttributeKey.stringKey("operation"), "find_yearly_total_price_by_id",
-                            AttributeKey.stringKey("status"), "failed",
-                            AttributeKey.stringKey("error_type"), e.getClass().getSimpleName()));
-
-                    return new ApiResponse<>("error", "Failed to fetch yearly total price by category", List.of());
-                })
-                .eventually(() -> {
-                    span.end();
-                    double duration = (System.currentTimeMillis() - startTime) / 1000.0;
-                    requestDurationSeconds.record(duration, Attributes.of(
-                            AttributeKey.stringKey("operation"), "find_yearly_total_price_by_id"));
-                });
-    }
+        private <T> Uni<T> runTraced(String operationName, String method, Attributes attributes,
+                        java.util.function.Supplier<Uni<T>> supplier) {
+                return tracingMetrics.traceAndMeasure(operationName, method, attributes, supplier);
+        }
 }

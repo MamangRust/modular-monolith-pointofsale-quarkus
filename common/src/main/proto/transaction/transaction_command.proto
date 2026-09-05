@@ -15,6 +15,9 @@ message CreateTransactionRequest {
   string payment_method = 4;
   int32 merchant_id = 5;
   google.protobuf.Timestamp transaction_time = 6;
+  // Client-sent idempotency key (Fase 12): replays of the same key return the
+  // existing transaction instead of creating a duplicate row.
+  string idempotency_key = 7;
 }
 
 message UpdateTransactionRequest {
@@ -25,6 +28,7 @@ message UpdateTransactionRequest {
   string payment_method = 5;
   int32 merchant_id = 6;
   google.protobuf.Timestamp transaction_time = 7;
+  string idempotency_key = 8;
 }
 
 message ApiResponseTransactionDelete {

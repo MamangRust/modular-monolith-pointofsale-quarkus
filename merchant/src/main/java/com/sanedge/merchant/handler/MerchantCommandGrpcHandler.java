@@ -1,27 +1,26 @@
 package com.sanedge.merchant.handler;
 
-import com.sanedge.merchant.service.MerchantCommandService;
-import com.sanedge.merchant.service.MerchantQueryService;
-import com.sanedge.common.domain.response.ApiResponse;
+import com.google.protobuf.Empty;
 import com.sanedge.merchant.domain.response.MerchantResponse;
 import com.sanedge.merchant.domain.response.MerchantResponseDeleteAt;
+import com.sanedge.merchant.service.MerchantCommandService;
+import com.sanedge.merchant.service.MerchantQueryService;
 
-import pb.merchant.MutinyMerchantCommandServiceGrpc;
-import pb.merchant.MerchantCommand.CreateMerchantRequest;
-import pb.merchant.MerchantCommand.UpdateMerchantRequest;
-import pb.merchant.MerchantCommand.UpdateMerchantStatusRequest;
-import pb.merchant.MerchantCommand.ApiResponseMerchantDelete;
-import pb.merchant.MerchantCommand.ApiResponseMerchantAll;
-import pb.merchant.Merchant.FindByIdMerchantRequest;
-import pb.merchant.Merchant.ApiResponseMerchant;
-import pb.merchant.Merchant.ApiResponseMerchantDeleteAt;
-
+import com.sanedge.common.grpc.GrpcErrorMapper;
 import io.grpc.Status;
 import io.quarkus.grpc.GrpcService;
 import io.smallrye.mutiny.Uni;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
-import com.google.protobuf.Empty;
+import pb.merchant.Merchant.ApiResponseMerchant;
+import pb.merchant.Merchant.ApiResponseMerchantDeleteAt;
+import pb.merchant.Merchant.FindByIdMerchantRequest;
+import pb.merchant.MerchantCommand.ApiResponseMerchantAll;
+import pb.merchant.MerchantCommand.ApiResponseMerchantDelete;
+import pb.merchant.MerchantCommand.CreateMerchantRequest;
+import pb.merchant.MerchantCommand.UpdateMerchantRequest;
+import pb.merchant.MerchantCommand.UpdateMerchantStatusRequest;
+import pb.merchant.MutinyMerchantCommandServiceGrpc;
 
 @GrpcService
 @Singleton
@@ -49,7 +48,7 @@ public class MerchantCommandGrpcHandler extends MutinyMerchantCommandServiceGrpc
                     }
                     return builder.build();
                 })
-                .onFailure().transform(e -> Status.INTERNAL.withDescription(e.getMessage()).asRuntimeException());
+                .onFailure().transform(GrpcErrorMapper::toStatusRuntimeException);
     }
 
     @Override
@@ -70,7 +69,7 @@ public class MerchantCommandGrpcHandler extends MutinyMerchantCommandServiceGrpc
                     }
                     return builder.build();
                 })
-                .onFailure().transform(e -> Status.INTERNAL.withDescription(e.getMessage()).asRuntimeException());
+                .onFailure().transform(GrpcErrorMapper::toStatusRuntimeException);
     }
 
     @Override
@@ -78,7 +77,8 @@ public class MerchantCommandGrpcHandler extends MutinyMerchantCommandServiceGrpc
         return merchantQueryService.findById((long) request.getMerchantId())
                 .chain(apiResp -> {
                     if (apiResp == null || apiResp.data() == null) {
-                        return Uni.createFrom().failure(Status.NOT_FOUND.withDescription("Merchant not found").asRuntimeException());
+                        return Uni.createFrom()
+                                .failure(Status.NOT_FOUND.withDescription("Merchant not found").asRuntimeException());
                     }
                     MerchantResponse existing = apiResp.data();
                     com.sanedge.merchant.domain.requests.UpdateMerchantRequest domainReq = new com.sanedge.merchant.domain.requests.UpdateMerchantRequest();
@@ -98,12 +98,7 @@ public class MerchantCommandGrpcHandler extends MutinyMerchantCommandServiceGrpc
                                 return builder.build();
                             });
                 })
-                .onFailure().transform(e -> {
-                    if (e instanceof io.grpc.StatusRuntimeException) {
-                        return e;
-                    }
-                    return Status.INTERNAL.withDescription(e.getMessage()).asRuntimeException();
-                });
+                .onFailure().transform(GrpcErrorMapper::toStatusRuntimeException);
     }
 
     @Override
@@ -118,7 +113,7 @@ public class MerchantCommandGrpcHandler extends MutinyMerchantCommandServiceGrpc
                     }
                     return builder.build();
                 })
-                .onFailure().transform(e -> Status.INTERNAL.withDescription(e.getMessage()).asRuntimeException());
+                .onFailure().transform(GrpcErrorMapper::toStatusRuntimeException);
     }
 
     @Override
@@ -133,7 +128,7 @@ public class MerchantCommandGrpcHandler extends MutinyMerchantCommandServiceGrpc
                     }
                     return builder.build();
                 })
-                .onFailure().transform(e -> Status.INTERNAL.withDescription(e.getMessage()).asRuntimeException());
+                .onFailure().transform(GrpcErrorMapper::toStatusRuntimeException);
     }
 
     @Override
@@ -143,7 +138,7 @@ public class MerchantCommandGrpcHandler extends MutinyMerchantCommandServiceGrpc
                         .setStatus(apiResp.status())
                         .setMessage(apiResp.message())
                         .build())
-                .onFailure().transform(e -> Status.INTERNAL.withDescription(e.getMessage()).asRuntimeException());
+                .onFailure().transform(GrpcErrorMapper::toStatusRuntimeException);
     }
 
     @Override
@@ -153,7 +148,7 @@ public class MerchantCommandGrpcHandler extends MutinyMerchantCommandServiceGrpc
                         .setStatus(apiResp.status())
                         .setMessage(apiResp.message())
                         .build())
-                .onFailure().transform(e -> Status.INTERNAL.withDescription(e.getMessage()).asRuntimeException());
+                .onFailure().transform(GrpcErrorMapper::toStatusRuntimeException);
     }
 
     @Override
@@ -163,7 +158,7 @@ public class MerchantCommandGrpcHandler extends MutinyMerchantCommandServiceGrpc
                         .setStatus(apiResp.status())
                         .setMessage(apiResp.message())
                         .build())
-                .onFailure().transform(e -> Status.INTERNAL.withDescription(e.getMessage()).asRuntimeException());
+                .onFailure().transform(GrpcErrorMapper::toStatusRuntimeException);
     }
 
     private pb.merchant.Merchant.MerchantResponse toProto(MerchantResponse r) {
@@ -199,7 +194,8 @@ public class MerchantCommandGrpcHandler extends MutinyMerchantCommandServiceGrpc
         if (r == null) {
             return pb.merchant.Merchant.MerchantResponseDeleteAt.getDefaultInstance();
         }
-        pb.merchant.Merchant.MerchantResponseDeleteAt.Builder builder = pb.merchant.Merchant.MerchantResponseDeleteAt.newBuilder();
+        pb.merchant.Merchant.MerchantResponseDeleteAt.Builder builder = pb.merchant.Merchant.MerchantResponseDeleteAt
+                .newBuilder();
         if (r.getId() != null) {
             builder.setId(r.getId().intValue());
         }

@@ -4,7 +4,7 @@ import com.sanedge.merchant.domain.response.MerchantResponse;
 import com.sanedge.merchant.domain.response.MerchantResponseDeleteAt;
 import com.sanedge.merchant.service.MerchantQueryService;
 
-import io.grpc.Status;
+import com.sanedge.common.grpc.GrpcErrorMapper;
 import io.quarkus.grpc.GrpcService;
 import io.smallrye.mutiny.Uni;
 import jakarta.inject.Inject;
@@ -48,7 +48,7 @@ public class MerchantQueryGrpcHandler extends MutinyMerchantQueryServiceGrpc.Mer
                     }
                     return builder.build();
                 })
-                .onFailure().transform(e -> Status.INTERNAL.withDescription(e.getMessage()).asRuntimeException());
+                .onFailure().transform(GrpcErrorMapper::toStatusRuntimeException);
     }
 
     @Override
@@ -63,7 +63,7 @@ public class MerchantQueryGrpcHandler extends MutinyMerchantQueryServiceGrpc.Mer
                     }
                     return builder.build();
                 })
-                .onFailure().transform(e -> Status.INTERNAL.withDescription(e.getMessage()).asRuntimeException());
+                .onFailure().transform(GrpcErrorMapper::toStatusRuntimeException);
     }
 
     @Override
@@ -78,7 +78,7 @@ public class MerchantQueryGrpcHandler extends MutinyMerchantQueryServiceGrpc.Mer
                     }
                     return builder.build();
                 })
-                .onFailure().transform(e -> Status.INTERNAL.withDescription(e.getMessage()).asRuntimeException());
+                .onFailure().transform(GrpcErrorMapper::toStatusRuntimeException);
     }
 
     @Override
@@ -95,7 +95,7 @@ public class MerchantQueryGrpcHandler extends MutinyMerchantQueryServiceGrpc.Mer
                     }
                     return builder.build();
                 })
-                .onFailure().transform(e -> Status.INTERNAL.withDescription(e.getMessage()).asRuntimeException());
+                .onFailure().transform(GrpcErrorMapper::toStatusRuntimeException);
     }
 
     @Override
@@ -121,7 +121,7 @@ public class MerchantQueryGrpcHandler extends MutinyMerchantQueryServiceGrpc.Mer
                     }
                     return builder.build();
                 })
-                .onFailure().transform(e -> Status.INTERNAL.withDescription(e.getMessage()).asRuntimeException());
+                .onFailure().transform(GrpcErrorMapper::toStatusRuntimeException);
     }
 
     @Override
@@ -147,7 +147,7 @@ public class MerchantQueryGrpcHandler extends MutinyMerchantQueryServiceGrpc.Mer
                     }
                     return builder.build();
                 })
-                .onFailure().transform(e -> Status.INTERNAL.withDescription(e.getMessage()).asRuntimeException());
+                .onFailure().transform(GrpcErrorMapper::toStatusRuntimeException);
     }
 
     private pb.merchant.Merchant.MerchantResponse toProto(MerchantResponse r) {

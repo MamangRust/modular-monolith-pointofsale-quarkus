@@ -1,12 +1,13 @@
 package com.sanedge.gateway.service;
 
+import com.sanedge.gateway.domain.requests.FindAllMerchantDocumentsRequest;
 import com.sanedge.gateway.dto.MerchantDocumentDto;
 import io.smallrye.mutiny.Uni;
 
 public interface MerchantDocumentService {
-    Uni<MerchantDocumentDto.ApiResponsePaginationMerchantDocument> listMerchantDocuments(int page, int size, String search);
-    Uni<MerchantDocumentDto.ApiResponsePaginationMerchantDocumentAt> listActiveMerchantDocuments(int page, int size, String search);
-    Uni<MerchantDocumentDto.ApiResponsePaginationMerchantDocumentAt> listTrashedMerchantDocuments(int page, int size, String search);
+    Uni<MerchantDocumentDto.ApiResponsePaginationMerchantDocument> listMerchantDocuments(FindAllMerchantDocumentsRequest request);
+    Uni<MerchantDocumentDto.ApiResponsePaginationMerchantDocumentAt> listActiveMerchantDocuments(FindAllMerchantDocumentsRequest request);
+    Uni<MerchantDocumentDto.ApiResponsePaginationMerchantDocumentAt> listTrashedMerchantDocuments(FindAllMerchantDocumentsRequest request);
     Uni<MerchantDocumentDto.ApiResponseMerchantDocument> getMerchantDocument(int id);
     Uni<MerchantDocumentDto.ApiResponseMerchantDocument> createMerchantDocument(MerchantDocumentDto.CreateRequest body);
     Uni<MerchantDocumentDto.ApiResponseMerchantDocument> updateMerchantDocument(int id, MerchantDocumentDto.UpdateRequest body);

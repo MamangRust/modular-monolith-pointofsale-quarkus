@@ -3,7 +3,7 @@ package com.sanedge.category.handler;
 import com.sanedge.category.domain.requests.FindAllCategory;
 import com.sanedge.category.service.CategoryQueryService;
 
-import io.grpc.Status;
+import com.sanedge.common.grpc.GrpcErrorMapper;
 import io.quarkus.grpc.GrpcService;
 import io.smallrye.mutiny.Uni;
 import jakarta.inject.Inject;
@@ -47,7 +47,7 @@ public class CategoryQueryGrpcHandler extends MutinyCategoryQueryServiceGrpc.Cat
                     }
                     return builder.build();
                 })
-                .onFailure().transform(e -> Status.INTERNAL.withDescription(e.getMessage()).asRuntimeException());
+                .onFailure().transform(GrpcErrorMapper::toStatusRuntimeException);
     }
 
     @Override
@@ -78,7 +78,7 @@ public class CategoryQueryGrpcHandler extends MutinyCategoryQueryServiceGrpc.Cat
                     }
                     return builder.build();
                 })
-                .onFailure().transform(e -> Status.INTERNAL.withDescription(e.getMessage()).asRuntimeException());
+                .onFailure().transform(GrpcErrorMapper::toStatusRuntimeException);
     }
 
     @Override
@@ -108,7 +108,7 @@ public class CategoryQueryGrpcHandler extends MutinyCategoryQueryServiceGrpc.Cat
                     }
                     return builder.build();
                 })
-                .onFailure().transform(e -> Status.INTERNAL.withDescription(e.getMessage()).asRuntimeException());
+                .onFailure().transform(GrpcErrorMapper::toStatusRuntimeException);
     }
 
     @Override
@@ -123,7 +123,7 @@ public class CategoryQueryGrpcHandler extends MutinyCategoryQueryServiceGrpc.Cat
                     }
                     return builder.build();
                 })
-                .onFailure().transform(e -> Status.INTERNAL.withDescription(e.getMessage()).asRuntimeException());
+                .onFailure().transform(GrpcErrorMapper::toStatusRuntimeException);
     }
 
     private pb.category.Category.CategoryResponse toProto(com.sanedge.category.domain.response.CategoryResponse r) {

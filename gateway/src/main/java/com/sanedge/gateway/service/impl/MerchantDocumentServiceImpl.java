@@ -1,6 +1,7 @@
 package com.sanedge.gateway.service.impl;
 
 import com.sanedge.gateway.dto.MerchantDocumentDto;
+import com.sanedge.gateway.domain.requests.FindAllMerchantDocumentsRequest;
 import com.sanedge.gateway.service.MerchantDocumentService;
 import com.sanedge.gateway.telemetry.TelemetryHelper;
 import io.quarkus.grpc.GrpcClient;
@@ -24,12 +25,12 @@ public class MerchantDocumentServiceImpl implements MerchantDocumentService {
     pb.merchant_document.MutinyMerchantDocumentCommandServiceGrpc.MutinyMerchantDocumentCommandServiceStub merchantDocumentCommandService;
 
     @Override
-    public Uni<MerchantDocumentDto.ApiResponsePaginationMerchantDocument> listMerchantDocuments(int page, int size, String search) {
+    public Uni<MerchantDocumentDto.ApiResponsePaginationMerchantDocument> listMerchantDocuments(FindAllMerchantDocumentsRequest request) {
         return telemetryHelper.traceAndMetric("merchant_document.listMerchantDocuments", () -> 
             merchantDocumentQueryService.findAll(pb.merchant_document.MerchantDocumentOuterClass.FindAllMerchantDocumentsRequest.newBuilder()
-                    .setPage(page)
-                    .setPageSize(size)
-                    .setSearch(search == null ? "" : search)
+                    .setPage(request.getPage())
+                    .setPageSize(request.getSize())
+                    .setSearch(request.getSearch() == null ? "" : request.getSearch())
                     .build())
                     .map(MerchantDocumentDto.ApiResponsePaginationMerchantDocument::from)
                     .onFailure().invoke(throwable -> LOG.error("Failed to list merchant documents: " + throwable.getMessage(), throwable))
@@ -37,12 +38,12 @@ public class MerchantDocumentServiceImpl implements MerchantDocumentService {
     }
 
     @Override
-    public Uni<MerchantDocumentDto.ApiResponsePaginationMerchantDocumentAt> listActiveMerchantDocuments(int page, int size, String search) {
+    public Uni<MerchantDocumentDto.ApiResponsePaginationMerchantDocumentAt> listActiveMerchantDocuments(FindAllMerchantDocumentsRequest request) {
         return telemetryHelper.traceAndMetric("merchant_document.listActiveMerchantDocuments", () -> 
             merchantDocumentQueryService.findAllActive(pb.merchant_document.MerchantDocumentOuterClass.FindAllMerchantDocumentsRequest.newBuilder()
-                    .setPage(page)
-                    .setPageSize(size)
-                    .setSearch(search == null ? "" : search)
+                    .setPage(request.getPage())
+                    .setPageSize(request.getSize())
+                    .setSearch(request.getSearch() == null ? "" : request.getSearch())
                     .build())
                     .map(MerchantDocumentDto.ApiResponsePaginationMerchantDocumentAt::from)
                     .onFailure().invoke(throwable -> LOG.error("Failed to list active merchant documents: " + throwable.getMessage(), throwable))
@@ -50,12 +51,12 @@ public class MerchantDocumentServiceImpl implements MerchantDocumentService {
     }
 
     @Override
-    public Uni<MerchantDocumentDto.ApiResponsePaginationMerchantDocumentAt> listTrashedMerchantDocuments(int page, int size, String search) {
+    public Uni<MerchantDocumentDto.ApiResponsePaginationMerchantDocumentAt> listTrashedMerchantDocuments(FindAllMerchantDocumentsRequest request) {
         return telemetryHelper.traceAndMetric("merchant_document.listTrashedMerchantDocuments", () -> 
             merchantDocumentQueryService.findAllTrashed(pb.merchant_document.MerchantDocumentOuterClass.FindAllMerchantDocumentsRequest.newBuilder()
-                    .setPage(page)
-                    .setPageSize(size)
-                    .setSearch(search == null ? "" : search)
+                    .setPage(request.getPage())
+                    .setPageSize(request.getSize())
+                    .setSearch(request.getSearch() == null ? "" : request.getSearch())
                     .build())
                     .map(MerchantDocumentDto.ApiResponsePaginationMerchantDocumentAt::from)
                     .onFailure().invoke(throwable -> LOG.error("Failed to list trashed merchant documents: " + throwable.getMessage(), throwable))

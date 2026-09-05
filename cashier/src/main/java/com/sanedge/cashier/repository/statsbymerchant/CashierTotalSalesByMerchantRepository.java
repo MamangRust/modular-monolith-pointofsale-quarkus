@@ -3,6 +3,8 @@ package com.sanedge.cashier.repository.statsbymerchant;
 import java.util.ArrayList;
 import java.util.List;
 
+import com.sanedge.cashier.domain.requests.FindCashierMonthTotalSalesByMerchant;
+import com.sanedge.cashier.domain.requests.FindCashierYearTotalSalesByMerchant;
 import com.sanedge.cashier.entity.Cashier;
 import com.sanedge.cashier.entity.CashierMonthTotalSales;
 import com.sanedge.cashier.entity.CashierYearTotalSales;
@@ -15,7 +17,7 @@ import jakarta.enterprise.context.ApplicationScoped;
 @ApplicationScoped
 public class CashierTotalSalesByMerchantRepository implements PanacheRepository<Cashier> {
 
-    public Uni<List<CashierMonthTotalSales>> findMonthTotalSalesByMerchant(Long merchantId, int startYear, int startMonth, int endYear, int endMonth) {
+    public Uni<List<CashierMonthTotalSales>> findMonthTotalSalesByMerchant(FindCashierMonthTotalSalesByMerchant req) {
         String sql = """
             WITH monthly_totals AS (
                 SELECT
@@ -34,9 +36,9 @@ public class CashierTotalSalesByMerchantRepository implements PanacheRepository<
                 GROUP BY CAST(EXTRACT(YEAR FROM o.created_at) AS VARCHAR), CAST(EXTRACT(MONTH FROM o.created_at) AS INTEGER)
             ),
             all_months AS (
-                SELECT CAST(:startYear AS VARCHAR) AS year, CAST(:startMonth AS INTEGER) AS month
+                SELECT CAST(CAST(:startYear AS INTEGER) AS VARCHAR) AS year, CAST(:startMonth AS INTEGER) AS month
                 UNION
-                SELECT CAST(:endYear AS VARCHAR) AS year, CAST(:endMonth AS INTEGER) AS month
+                SELECT CAST(CAST(:endYear AS INTEGER) AS VARCHAR) AS year, CAST(:endMonth AS INTEGER) AS month
             )
             SELECT
                 am.year,
@@ -49,11 +51,11 @@ public class CashierTotalSalesByMerchantRepository implements PanacheRepository<
 
         return Panache.getSession()
                 .chain(session -> session.createNativeQuery(sql)
-                        .setParameter("merchantId", merchantId)
-                        .setParameter("startYear", startYear)
-                        .setParameter("startMonth", startMonth)
-                        .setParameter("endYear", endYear)
-                        .setParameter("endMonth", endMonth)
+                        .setParameter("merchantId", req.getMerchantId())
+                        .setParameter("startYear", req.getStartYear())
+                        .setParameter("startMonth", req.getStartMonth())
+                        .setParameter("endYear", req.getEndYear())
+                        .setParameter("endMonth", req.getEndMonth())
                         .getResultList())
                 .map(rawList -> {
                     List<CashierMonthTotalSales> list = new ArrayList<>();
@@ -69,7 +71,7 @@ public class CashierTotalSalesByMerchantRepository implements PanacheRepository<
                 });
     }
 
-    public Uni<List<CashierYearTotalSales>> findYearTotalSalesByMerchant(Long merchantId, int year, int yearMinusOne) {
+    public Uni<List<CashierYearTotalSales>> findYearTotalSalesByMerchant(FindCashierYearTotalSalesByMerchant req) {
         String sql = """
             WITH yearly_data AS (
                 SELECT
@@ -98,9 +100,9 @@ public class CashierTotalSalesByMerchantRepository implements PanacheRepository<
 
         return Panache.getSession()
                 .chain(session -> session.createNativeQuery(sql)
-                        .setParameter("merchantId", merchantId)
-                        .setParameter("year", year)
-                        .setParameter("yearMinusOne", yearMinusOne)
+                        .setParameter("merchantId", req.getMerchantId())
+                        .setParameter("year", req.getYear())
+                        .setParameter("yearMinusOne", req.getYearMinusOne())
                         .getResultList())
                 .map(rawList -> {
                     List<CashierYearTotalSales> list = new ArrayList<>();

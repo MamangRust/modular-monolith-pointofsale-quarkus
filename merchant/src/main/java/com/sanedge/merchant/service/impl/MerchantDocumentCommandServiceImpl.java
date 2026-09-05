@@ -4,29 +4,21 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.sanedge.common.config.RedisService;
+import com.sanedge.common.domain.response.ApiResponse;
+import com.sanedge.common.exception.ResourceNotFoundException;
+import com.sanedge.common.observability.TracingMetrics;
 import com.sanedge.merchant.domain.requests.CreateMerchantDocumentRequest;
 import com.sanedge.merchant.domain.requests.UpdateMerchantDocumentRequest;
 import com.sanedge.merchant.domain.requests.UpdateMerchantDocumentStatus;
-import com.sanedge.common.domain.response.ApiResponse;
 import com.sanedge.merchant.domain.response.MerchantDocumentResponse;
 import com.sanedge.merchant.domain.response.MerchantDocumentResponseDeleteAt;
 import com.sanedge.merchant.entity.MerchantDocument;
-import com.sanedge.common.exception.ResourceNotFoundException;
-import com.sanedge.merchant.repository.MerchantQueryRepository;
 import com.sanedge.merchant.repository.MerchantDocumentCommandRepository;
 import com.sanedge.merchant.repository.MerchantDocumentQueryRepository;
+import com.sanedge.merchant.repository.MerchantQueryRepository;
 import com.sanedge.merchant.service.MerchantDocumentCommandService;
 
-import io.opentelemetry.api.OpenTelemetry;
-import io.opentelemetry.api.common.AttributeKey;
 import io.opentelemetry.api.common.Attributes;
-import io.opentelemetry.api.metrics.DoubleHistogram;
-import io.opentelemetry.api.metrics.LongCounter;
-import io.opentelemetry.api.metrics.Meter;
-import io.opentelemetry.api.trace.Span;
-import io.opentelemetry.api.trace.SpanKind;
-import io.opentelemetry.api.trace.StatusCode;
-import io.opentelemetry.api.trace.Tracer;
 import io.quarkus.hibernate.reactive.panache.common.WithTransaction;
 import io.smallrye.mutiny.Uni;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -34,397 +26,363 @@ import jakarta.inject.Inject;
 
 @ApplicationScoped
 public class MerchantDocumentCommandServiceImpl implements MerchantDocumentCommandService {
-    private static final Logger logger = LoggerFactory.getLogger(MerchantDocumentCommandServiceImpl.class);
+        private static final Logger logger = LoggerFactory.getLogger(MerchantDocumentCommandServiceImpl.class);
 
-    private final MerchantQueryRepository merchantQueryRepository;
-    private final MerchantDocumentQueryRepository merchantDocumentQueryRepository;
-    private final MerchantDocumentCommandRepository merchantDocumentCommandRepository;
-    private final RedisService redisService;
+        private final MerchantQueryRepository merchantQueryRepository;
+        private final MerchantDocumentQueryRepository merchantDocumentQueryRepository;
+        private final MerchantDocumentCommandRepository merchantDocumentCommandRepository;
+        private final RedisService redisService;
+        private final TracingMetrics tracingMetrics;
 
-    private final Tracer tracer;
-    private final LongCounter requestsTotal;
-    private final DoubleHistogram requestDurationSeconds;
+        @Inject
+        public MerchantDocumentCommandServiceImpl(
+                        MerchantQueryRepository merchantQueryRepository,
+                        MerchantDocumentQueryRepository merchantDocumentQueryRepository,
+                        MerchantDocumentCommandRepository merchantDocumentCommandRepository,
+                        RedisService redisService,
+                        TracingMetrics tracingMetrics) {
+                this.merchantQueryRepository = merchantQueryRepository;
+                this.merchantDocumentQueryRepository = merchantDocumentQueryRepository;
+                this.merchantDocumentCommandRepository = merchantDocumentCommandRepository;
+                this.redisService = redisService;
+                this.tracingMetrics = tracingMetrics;
+        }
 
-    @Inject
-    public MerchantDocumentCommandServiceImpl(
-                    MerchantQueryRepository merchantQueryRepository,
-                    MerchantDocumentQueryRepository merchantDocumentQueryRepository,
-                    MerchantDocumentCommandRepository merchantDocumentCommandRepository,
-                    OpenTelemetry openTelemetry,
-                    RedisService redisService) {
-        this.merchantQueryRepository = merchantQueryRepository;
-        this.merchantDocumentQueryRepository = merchantDocumentQueryRepository;
-        this.merchantDocumentCommandRepository = merchantDocumentCommandRepository;
-        this.redisService = redisService;
-        this.tracer = openTelemetry.getTracer("merchant-document-command-service", "1.0.0");
-        Meter meter = openTelemetry.getMeter("merchant-document-command-service");
+        @Override
+        @WithTransaction
+        public Uni<ApiResponse<MerchantDocumentResponse>> create(CreateMerchantDocumentRequest req) {
+                logger.info("Creating merchant document | MerchantId: {}, Type: {}", req.getMerchantId(),
+                                req.getDocumentType());
+                Attributes attrs = Attributes.builder()
+                                .put("merchant.id", req.getMerchantId().toString())
+                                .build();
 
-        this.requestsTotal = meter.counterBuilder("requests_total")
-                        .setDescription("Total number of requests")
-                        .build();
-        this.requestDurationSeconds = meter.histogramBuilder("request_duration_seconds")
-                        .setDescription("Request duration in seconds")
-                        .setUnit("s")
-                        .build();
-    }
+                return runTraced("createMerchantDocument", "create_merchant_document", attrs,
+                                () -> merchantQueryRepository.findMerchantById(req.getMerchantId())
+                                                .chain(merchant -> {
+                                                        if (merchant == null) {
+                                                                logger.error("Merchant not found with id {}",
+                                                                                req.getMerchantId());
+                                                                throw new ResourceNotFoundException(
+                                                                                "Merchant not found");
+                                                        }
 
-    @Override
-    @WithTransaction
-    public Uni<ApiResponse<MerchantDocumentResponse>> create(CreateMerchantDocumentRequest req) {
-        long startTime = System.currentTimeMillis();
-        Span span = tracer.spanBuilder("createMerchantDocument")
-                        .setSpanKind(SpanKind.SERVER)
-                        .setAttribute("service.name", "merchant-document-command-service")
-                        .setAttribute("operation", "create")
-                        .setAttribute("merchant.id", req.getMerchantId())
-                        .startSpan();
+                                                        MerchantDocument doc = new MerchantDocument();
+                                                        doc.setMerchantId(req.getMerchantId().intValue());
+                                                        doc.setDocumentType(req.getDocumentType());
+                                                        doc.setDocumentUrl(req.getDocumentUrl());
+                                                        doc.setStatus("PENDING");
 
-        logger.info("📄 Creating merchant document | MerchantId: {}, Type: {}", req.getMerchantId(), req.getDocumentType());
+                                                        return merchantDocumentCommandRepository.persist(doc)
+                                                                        .chain(savedDoc -> {
+                                                                                logger.info("Merchant document created successfully | Id: {}",
+                                                                                                savedDoc.getDocumentId());
+                                                                                return Uni.createFrom()
+                                                                                                .item(ApiResponse
+                                                                                                                .success("Merchant document created successfully",
+                                                                                                                                MerchantDocumentResponse
+                                                                                                                                                .from(savedDoc)));
+                                                                        });
+                                                })
+                                                .onFailure().recoverWithItem(e -> {
+                                                        logger.error("Failed to create merchant document", e);
+                                                        return new ApiResponse<>("error",
+                                                                        "Failed to create merchant document: "
+                                                                                        + e.getMessage(),
+                                                                        (MerchantDocumentResponse) null);
+                                                }));
+        }
 
-        return merchantQueryRepository.findMerchantById(req.getMerchantId())
-                .chain(merchant -> {
-                    if (merchant == null) {
-                        logger.error("ResourceNotFound: Merchant not found with id {}", req.getMerchantId());
-                        span.setStatus(StatusCode.ERROR, "Merchant not found");
-                        throw new ResourceNotFoundException("Merchant not found");
-                    }
+        @Override
+        @WithTransaction
+        public Uni<ApiResponse<MerchantDocumentResponse>> update(UpdateMerchantDocumentRequest req) {
+                logger.info("Updating merchant document | Id: {}", req.getDocumentId());
+                Attributes attrs = Attributes.builder()
+                                .put("doc.id", req.getDocumentId().toString())
+                                .build();
 
-                    MerchantDocument doc = new MerchantDocument();
-                    doc.setMerchantId(req.getMerchantId().intValue());
-                    doc.setDocumentType(req.getDocumentType());
-                    doc.setDocumentUrl(req.getDocumentUrl());
-                    doc.setStatus("PENDING");
+                return runTraced("updateMerchantDocument", "update_merchant_document", attrs,
+                                () -> merchantDocumentQueryRepository.findDocumentById(req.getDocumentId())
+                                                .chain(doc -> {
+                                                        if (doc == null) {
+                                                                logger.error("Merchant document not found with id {}",
+                                                                                req.getDocumentId());
+                                                                throw new ResourceNotFoundException(
+                                                                                "Merchant document not found");
+                                                        }
 
-                    return merchantDocumentCommandRepository.persist(doc)
-                            .chain(savedDoc -> {
-                                logger.info("✅ Merchant document created successfully | Id: {}", savedDoc.getDocumentId());
-                                span.setStatus(StatusCode.OK);
+                                                        return merchantQueryRepository
+                                                                        .findMerchantById(req.getMerchantId())
+                                                                        .chain(merchant -> {
+                                                                                if (merchant == null) {
+                                                                                        logger.error("Merchant not found with id {}",
+                                                                                                        req.getMerchantId());
+                                                                                        throw new ResourceNotFoundException(
+                                                                                                        "Merchant not found");
+                                                                                }
 
-                                requestsTotal.add(1, Attributes.of(
-                                                AttributeKey.stringKey("operation"), "create",
-                                                AttributeKey.stringKey("status"), "success"));
+                                                                                doc.setMerchantId(req.getMerchantId()
+                                                                                                .intValue());
+                                                                                doc.setDocumentType(
+                                                                                                req.getDocumentType());
+                                                                                doc.setDocumentUrl(
+                                                                                                req.getDocumentUrl());
+                                                                                doc.setNote(req.getNote());
+                                                                                doc.setStatus(req.getStatus());
 
-                                return Uni.createFrom().item(ApiResponse.success("Merchant document created successfully", MerchantDocumentResponse.from(savedDoc)));
-                            });
-                })
-                .onFailure().invoke(e -> {
-                    logger.error("💥 Failed to create merchant document", e);
-                    span.recordException(e);
-                    span.setStatus(StatusCode.ERROR, e.getMessage());
-                })
-                .eventually(() -> {
-                    span.end();
-                    double duration = (System.currentTimeMillis() - startTime) / 1000.0;
-                    requestDurationSeconds.record(duration, Attributes.of(
-                                    AttributeKey.stringKey("operation"), "create"));
-                });
-    }
+                                                                                return merchantDocumentCommandRepository
+                                                                                                .persist(doc)
+                                                                                                .chain(savedDoc -> {
+                                                                                                        String cacheKey = "merchant_doc:id:"
+                                                                                                                        + req.getDocumentId();
 
-    @Override
-    @WithTransaction
-    public Uni<ApiResponse<MerchantDocumentResponse>> update(UpdateMerchantDocumentRequest req) {
-        long startTime = System.currentTimeMillis();
-        Span span = tracer.spanBuilder("updateMerchantDocument")
-                        .setSpanKind(SpanKind.SERVER)
-                        .setAttribute("service.name", "merchant-document-command-service")
-                        .setAttribute("operation", "update")
-                        .setAttribute("doc.id", req.getDocumentId())
-                        .startSpan();
+                                                                                                        return redisService
+                                                                                                                        .deleteReactive(cacheKey)
+                                                                                                                        .map(v -> {
+                                                                                                                                logger.info(
+                                                                                                                                                "Merchant document updated successfully | Id: {}",
+                                                                                                                                                req.getDocumentId());
+                                                                                                                                return ApiResponse
+                                                                                                                                                .success(
+                                                                                                                                                                "Merchant document updated successfully",
+                                                                                                                                                                MerchantDocumentResponse
+                                                                                                                                                                                .from(savedDoc));
+                                                                                                                        });
+                                                                                                });
+                                                                        });
+                                                })
+                                                .onFailure().recoverWithItem(e -> {
+                                                        logger.error("Failed to update merchant document", e);
+                                                        return new ApiResponse<>("error",
+                                                                        "Failed to update merchant document: "
+                                                                                        + e.getMessage(),
+                                                                        (MerchantDocumentResponse) null);
+                                                }));
+        }
 
-        logger.info("🛠️ Updating merchant document | Id: {}", req.getDocumentId());
+        @Override
+        @WithTransaction
+        public Uni<ApiResponse<MerchantDocumentResponse>> updateStatus(UpdateMerchantDocumentStatus req) {
+                logger.info("Updating merchant document status | Id: {}", req.getDocumentId());
+                Attributes attrs = Attributes.builder()
+                                .put("doc.id", req.getDocumentId().toString())
+                                .build();
 
-        return merchantDocumentQueryRepository.findDocumentById(req.getDocumentId())
-                .chain(doc -> {
-                    if (doc == null) {
-                        logger.error("❌ Merchant document not found with id {}", req.getDocumentId());
-                        span.setStatus(StatusCode.ERROR, "Merchant document not found");
-                        throw new ResourceNotFoundException("Merchant document not found");
-                    }
+                return runTraced("updateMerchantDocumentStatus", "update_merchant_document_status", attrs,
+                                () -> merchantDocumentQueryRepository.findDocumentById(req.getDocumentId())
+                                                .chain(doc -> {
+                                                        if (doc == null) {
+                                                                logger.error("Merchant document not found with id {}",
+                                                                                req.getDocumentId());
+                                                                throw new ResourceNotFoundException(
+                                                                                "Merchant document not found");
+                                                        }
 
-                    return merchantQueryRepository.findMerchantById(req.getMerchantId())
-                            .chain(merchant -> {
-                                if (merchant == null) {
-                                    logger.error("❌ Merchant not found with id {}", req.getMerchantId());
-                                    span.setStatus(StatusCode.ERROR, "Merchant not found");
-                                    throw new ResourceNotFoundException("Merchant not found");
-                                }
+                                                        return merchantQueryRepository
+                                                                        .findMerchantById(req.getMerchantId())
+                                                                        .chain(merchant -> {
+                                                                                if (merchant == null) {
+                                                                                        logger.error("Merchant not found with id {}",
+                                                                                                        req.getMerchantId());
+                                                                                        throw new ResourceNotFoundException(
+                                                                                                        "Merchant not found");
+                                                                                }
 
-                                doc.setMerchantId(req.getMerchantId().intValue());
-                                doc.setDocumentType(req.getDocumentType());
-                                doc.setDocumentUrl(req.getDocumentUrl());
-                                doc.setNote(req.getNote());
-                                doc.setStatus(req.getStatus());
+                                                                                doc.setStatus(req.getStatus());
+                                                                                doc.setNote(req.getNote());
 
-                                return merchantDocumentCommandRepository.persist(doc)
-                                        .chain(savedDoc -> {
-                                            String cacheKey = "merchant_doc:id:" + req.getDocumentId();
+                                                                                return merchantDocumentCommandRepository
+                                                                                                .persist(doc)
+                                                                                                .chain(savedDoc -> {
+                                                                                                        String cacheKey = "merchant_doc:id:"
+                                                                                                                        + req.getDocumentId();
 
-                                            return redisService.deleteReactive(cacheKey)
-                                                    .map(v -> {
-                                                        logger.info("✅ Merchant document updated successfully | Id: {}", req.getDocumentId());
-                                                        span.setStatus(StatusCode.OK);
-                                                        return ApiResponse.success("Merchant document updated successfully", MerchantDocumentResponse.from(savedDoc));
-                                                    });
-                                        });
-                            });
-                })
-                .onFailure().invoke(e -> {
-                    logger.error("💥 Failed to update merchant document", e);
-                    span.recordException(e);
-                    span.setStatus(StatusCode.ERROR, e.getMessage());
-                })
-                .eventually(() -> {
-                    span.end();
-                    double duration = (System.currentTimeMillis() - startTime) / 1000.0;
-                    requestDurationSeconds.record(duration, Attributes.of(
-                                    AttributeKey.stringKey("operation"), "update"));
-                });
-    }
+                                                                                                        return redisService
+                                                                                                                        .deleteReactive(cacheKey)
+                                                                                                                        .map(v -> {
+                                                                                                                                logger.info(
+                                                                                                                                                "Merchant document status updated successfully | Id: {}",
+                                                                                                                                                req.getDocumentId());
+                                                                                                                                return ApiResponse
+                                                                                                                                                .success(
+                                                                                                                                                                "Merchant document status updated successfully",
+                                                                                                                                                                MerchantDocumentResponse
+                                                                                                                                                                                .from(savedDoc));
+                                                                                                                        });
+                                                                                                });
+                                                                        });
+                                                })
+                                                .onFailure().recoverWithItem(e -> {
+                                                        logger.error("Failed to update merchant document status", e);
+                                                        return new ApiResponse<>("error",
+                                                                        "Failed to update merchant document status: "
+                                                                                        + e.getMessage(),
+                                                                        (MerchantDocumentResponse) null);
+                                                }));
+        }
 
-    @Override
-    @WithTransaction
-    public Uni<ApiResponse<MerchantDocumentResponse>> updateStatus(UpdateMerchantDocumentStatus req) {
-        long startTime = System.currentTimeMillis();
-        Span span = tracer.spanBuilder("updateMerchantDocumentStatus")
-                        .setSpanKind(SpanKind.SERVER)
-                        .setAttribute("service.name", "merchant-document-command-service")
-                        .setAttribute("operation", "update_status")
-                        .setAttribute("doc.id", req.getDocumentId())
-                        .startSpan();
+        @Override
+        @WithTransaction
+        public Uni<ApiResponse<MerchantDocumentResponseDeleteAt>> trash(Long id) {
+                logger.info("Trashing merchant document | Id: {}", id);
+                Attributes attrs = Attributes.builder()
+                                .put("doc.id", id.toString())
+                                .build();
 
-        logger.info("🛠️ Updating merchant document status | Id: {}", req.getDocumentId());
+                return runTraced("trashMerchantDocument", "trash_merchant_document", attrs,
+                                () -> merchantDocumentCommandRepository.trashed(id)
+                                                .chain(doc -> {
+                                                        if (doc == null) {
+                                                                logger.error("Merchant document not found with id {}",
+                                                                                id);
+                                                                throw new ResourceNotFoundException(
+                                                                                "Merchant document not found");
+                                                        }
 
-        return merchantDocumentQueryRepository.findDocumentById(req.getDocumentId())
-                .chain(doc -> {
-                    if (doc == null) {
-                        logger.error("❌ Merchant document not found with id {}", req.getDocumentId());
-                        span.setStatus(StatusCode.ERROR, "Merchant document not found");
-                        throw new ResourceNotFoundException("Merchant document not found");
-                    }
+                                                        String cacheKey = "merchant_doc:id:" + id;
 
-                    return merchantQueryRepository.findMerchantById(req.getMerchantId())
-                            .chain(merchant -> {
-                                if (merchant == null) {
-                                    logger.error("❌ Merchant not found with id {}", req.getMerchantId());
-                                    span.setStatus(StatusCode.ERROR, "Merchant not found");
-                                    throw new ResourceNotFoundException("Merchant not found");
-                                }
+                                                        return redisService.deleteReactive(cacheKey)
+                                                                        .map(v -> {
+                                                                                logger.info("Merchant document trashed successfully | Id: {}",
+                                                                                                id);
+                                                                                return ApiResponse.success(
+                                                                                                "Merchant document trashed successfully",
+                                                                                                MerchantDocumentResponseDeleteAt
+                                                                                                                .from(doc));
+                                                                        });
+                                                })
+                                                .onFailure().recoverWithItem(e -> {
+                                                        logger.error("Failed to trash merchant document", e);
+                                                        return new ApiResponse<>("error",
+                                                                        "Failed to trash merchant document: "
+                                                                                        + e.getMessage(),
+                                                                        (MerchantDocumentResponseDeleteAt) null);
+                                                }));
+        }
 
-                                doc.setStatus(req.getStatus());
-                                doc.setNote(req.getNote());
+        @Override
+        @WithTransaction
+        public Uni<ApiResponse<MerchantDocumentResponseDeleteAt>> restore(Long id) {
+                logger.info("Restoring merchant document | Id: {}", id);
+                Attributes attrs = Attributes.builder()
+                                .put("doc.id", id.toString())
+                                .build();
 
-                                return merchantDocumentCommandRepository.persist(doc)
-                                        .chain(savedDoc -> {
-                                            String cacheKey = "merchant_doc:id:" + req.getDocumentId();
+                return runTraced("restoreMerchantDocument", "restore_merchant_document", attrs,
+                                () -> merchantDocumentCommandRepository.restore(id)
+                                                .chain(doc -> {
+                                                        if (doc == null) {
+                                                                logger.error("Merchant document not found with id {}",
+                                                                                id);
+                                                                throw new ResourceNotFoundException(
+                                                                                "Merchant document not found");
+                                                        }
 
-                                            return redisService.deleteReactive(cacheKey)
-                                                    .map(v -> {
-                                                        logger.info("✅ Merchant document status updated successfully | Id: {}", req.getDocumentId());
-                                                        span.setStatus(StatusCode.OK);
-                                                        return ApiResponse.success("Merchant document status updated successfully", MerchantDocumentResponse.from(savedDoc));
-                                                    });
-                                        });
-                            });
-                })
-                .onFailure().invoke(e -> {
-                    logger.error("💥 Failed to update merchant document status", e);
-                    span.recordException(e);
-                    span.setStatus(StatusCode.ERROR, e.getMessage());
-                })
-                .eventually(() -> {
-                    span.end();
-                    double duration = (System.currentTimeMillis() - startTime) / 1000.0;
-                    requestDurationSeconds.record(duration, Attributes.of(
-                                    AttributeKey.stringKey("operation"), "update_status"));
-                });
-    }
+                                                        String cacheKey = "merchant_doc:id:" + id;
 
-    @Override
-    @WithTransaction
-    public Uni<ApiResponse<MerchantDocumentResponseDeleteAt>> trash(Long id) {
-        long startTime = System.currentTimeMillis();
-        Span span = tracer.spanBuilder("trashMerchantDocument")
-                        .setSpanKind(SpanKind.SERVER)
-                        .setAttribute("service.name", "merchant-document-command-service")
-                        .setAttribute("operation", "trash")
-                        .setAttribute("doc.id", id.toString())
-                        .startSpan();
+                                                        return redisService.deleteReactive(cacheKey)
+                                                                        .map(v -> {
+                                                                                logger.info("Merchant document restored successfully | Id: {}",
+                                                                                                id);
+                                                                                return ApiResponse.success(
+                                                                                                "Merchant document restored successfully",
+                                                                                                MerchantDocumentResponseDeleteAt
+                                                                                                                .from(doc));
+                                                                        });
+                                                })
+                                                .onFailure().recoverWithItem(e -> {
+                                                        logger.error("Failed to restore merchant document", e);
+                                                        return new ApiResponse<>("error",
+                                                                        "Failed to restore merchant document: "
+                                                                                        + e.getMessage(),
+                                                                        (MerchantDocumentResponseDeleteAt) null);
+                                                }));
+        }
 
-        logger.info("🗑️ Trashing merchant document | Id: {}", id);
+        @Override
+        @WithTransaction
+        public Uni<ApiResponse<Boolean>> deletePermanent(Long id) {
+                logger.info("Permanently deleting merchant document | Id: {}", id);
+                Attributes attrs = Attributes.builder()
+                                .put("doc.id", id.toString())
+                                .build();
 
-        return merchantDocumentCommandRepository.trashed(id)
-                .chain(doc -> {
-                    if (doc == null) {
-                        logger.error("❌ Merchant document not found with id {}", id);
-                        span.setStatus(StatusCode.ERROR, "Merchant document not found");
-                        throw new ResourceNotFoundException("Merchant document not found");
-                    }
+                return runTraced("deletePermanentMerchantDocument", "delete_permanent_merchant_document", attrs,
+                                () -> merchantDocumentCommandRepository.deletePermanent(id)
+                                                .chain(success -> {
+                                                        if (!success) {
+                                                                logger.error("Merchant document not found with id {}",
+                                                                                id);
+                                                                throw new ResourceNotFoundException(
+                                                                                "Merchant document not found");
+                                                        }
 
-                    String cacheKey = "merchant_doc:id:" + id;
+                                                        String cacheKey = "merchant_doc:id:" + id;
 
-                    return redisService.deleteReactive(cacheKey)
-                            .map(v -> {
-                                logger.info("✅ Merchant document trashed successfully | Id: {}", id);
-                                span.setStatus(StatusCode.OK);
-                                return ApiResponse.success("Merchant document trashed successfully", MerchantDocumentResponseDeleteAt.from(doc));
-                            });
-                })
-                .onFailure().invoke(e -> {
-                    logger.error("💥 Failed to trash merchant document", e);
-                    span.recordException(e);
-                    span.setStatus(StatusCode.ERROR, e.getMessage());
-                })
-                .eventually(() -> {
-                    span.end();
-                    double duration = (System.currentTimeMillis() - startTime) / 1000.0;
-                    requestDurationSeconds.record(duration, Attributes.of(
-                                    AttributeKey.stringKey("operation"), "trash"));
-                });
-    }
+                                                        return redisService.deleteReactive(cacheKey)
+                                                                        .map(v -> {
+                                                                                logger.info("Merchant document permanently deleted | Id: {}",
+                                                                                                id);
+                                                                                return ApiResponse.success(
+                                                                                                "Merchant document permanently deleted",
+                                                                                                true);
+                                                                        });
+                                                })
+                                                .onFailure().recoverWithItem(e -> {
+                                                        logger.error("Failed to permanently delete merchant document",
+                                                                        e);
+                                                        return new ApiResponse<>("error",
+                                                                        "Failed to delete merchant document: "
+                                                                                        + e.getMessage(),
+                                                                        false);
+                                                }));
+        }
 
-    @Override
-    @WithTransaction
-    public Uni<ApiResponse<MerchantDocumentResponseDeleteAt>> restore(Long id) {
-        long startTime = System.currentTimeMillis();
-        Span span = tracer.spanBuilder("restoreMerchantDocument")
-                        .setSpanKind(SpanKind.SERVER)
-                        .setAttribute("service.name", "merchant-document-command-service")
-                        .setAttribute("operation", "restore")
-                        .setAttribute("doc.id", id.toString())
-                        .startSpan();
+        @Override
+        @WithTransaction
+        public Uni<ApiResponse<Boolean>> restoreAll() {
+                logger.info("Restoring all merchant documents");
 
-        logger.info("♻️ Restoring merchant document | Id: {}", id);
+                return runTraced("restoreAllMerchantDocuments", "restore_all_merchant_documents", Attributes.empty(),
+                                () -> merchantDocumentCommandRepository.restoreAllDeleted()
+                                                .map(success -> {
+                                                        logger.info("All merchant documents restored successfully");
+                                                        return ApiResponse.success(
+                                                                        "All merchant documents restored successfully",
+                                                                        success);
+                                                })
+                                                .onFailure().recoverWithItem(e -> {
+                                                        logger.error("Failed to restore all merchant documents", e);
+                                                        return new ApiResponse<>("error",
+                                                                        "Failed to restore all merchant documents: "
+                                                                                        + e.getMessage(),
+                                                                        false);
+                                                }));
+        }
 
-        return merchantDocumentCommandRepository.restore(id)
-                .chain(doc -> {
-                    if (doc == null) {
-                        logger.error("❌ Merchant document not found with id {}", id);
-                        span.setStatus(StatusCode.ERROR, "Merchant document not found");
-                        throw new ResourceNotFoundException("Merchant document not found");
-                    }
+        @Override
+        @WithTransaction
+        public Uni<ApiResponse<Boolean>> deleteAllPermanent() {
+                logger.info("Permanently deleting all trashed merchant documents");
 
-                    String cacheKey = "merchant_doc:id:" + id;
+                return runTraced("deleteAllPermanentMerchantDocuments", "delete_all_permanent_merchant_documents",
+                                Attributes.empty(),
+                                () -> merchantDocumentCommandRepository.deleteAllDeleted()
+                                                .map(success -> {
+                                                        if (!success) {
+                                                                throw new ResourceNotFoundException(
+                                                                                "No trashed merchant documents");
+                                                        }
 
-                    return redisService.deleteReactive(cacheKey)
-                            .map(v -> {
-                                logger.info("✅ Merchant document restored successfully | Id: {}", id);
-                                span.setStatus(StatusCode.OK);
-                                return ApiResponse.success("Merchant document restored successfully", MerchantDocumentResponseDeleteAt.from(doc));
-                            });
-                })
-                .onFailure().invoke(e -> {
-                    logger.error("💥 Failed to restore merchant document", e);
-                    span.recordException(e);
-                    span.setStatus(StatusCode.ERROR, e.getMessage());
-                })
-                .eventually(() -> {
-                    span.end();
-                    double duration = (System.currentTimeMillis() - startTime) / 1000.0;
-                    requestDurationSeconds.record(duration, Attributes.of(
-                                    AttributeKey.stringKey("operation"), "restore"));
-                });
-    }
+                                                        logger.info("All trashed merchant documents permanently deleted");
+                                                        return ApiResponse.success(
+                                                                        "All trashed merchant documents permanently deleted",
+                                                                        success);
+                                                }));
+        }
 
-    @Override
-    @WithTransaction
-    public Uni<ApiResponse<Boolean>> deletePermanent(Long id) {
-        long startTime = System.currentTimeMillis();
-        Span span = tracer.spanBuilder("deletePermanentMerchantDocument")
-                        .setSpanKind(SpanKind.SERVER)
-                        .setAttribute("service.name", "merchant-document-command-service")
-                        .setAttribute("operation", "delete_permanent")
-                        .setAttribute("doc.id", id.toString())
-                        .startSpan();
-
-        logger.info("🗑️ Permanently deleting merchant document | Id: {}", id);
-
-        return merchantDocumentCommandRepository.deletePermanent(id)
-                .chain(success -> {
-                    if (!success) {
-                        logger.error("❌ Merchant document not found with id {}", id);
-                        span.setStatus(StatusCode.ERROR, "Merchant document not found");
-                        throw new ResourceNotFoundException("Merchant document not found");
-                    }
-
-                    String cacheKey = "merchant_doc:id:" + id;
-
-                    return redisService.deleteReactive(cacheKey)
-                            .map(v -> {
-                                logger.info("✅ Merchant document permanently deleted | Id: {}", id);
-                                span.setStatus(StatusCode.OK);
-                                return ApiResponse.success("Merchant document permanently deleted", true);
-                            });
-                })
-                .onFailure().invoke(e -> {
-                    logger.error("💥 Failed to permanently delete merchant document", e);
-                    span.recordException(e);
-                    span.setStatus(StatusCode.ERROR, e.getMessage());
-                })
-                .eventually(() -> {
-                    span.end();
-                    double duration = (System.currentTimeMillis() - startTime) / 1000.0;
-                    requestDurationSeconds.record(duration, Attributes.of(
-                                    AttributeKey.stringKey("operation"), "delete_permanent"));
-                });
-    }
-
-    @Override
-    @WithTransaction
-    public Uni<ApiResponse<Boolean>> restoreAll() {
-        long startTime = System.currentTimeMillis();
-        Span span = tracer.spanBuilder("restoreAllMerchantDocuments")
-                        .setSpanKind(SpanKind.SERVER)
-                        .setAttribute("service.name", "merchant-document-command-service")
-                        .setAttribute("operation", "restore_all")
-                        .startSpan();
-
-        logger.info("♻️ Restoring all merchant documents");
-
-        return merchantDocumentCommandRepository.restoreAllDeleted()
-                .map(success -> {
-                    span.setStatus(StatusCode.OK);
-                    return ApiResponse.success("All merchant documents restored successfully", success);
-                })
-                .onFailure().invoke(e -> {
-                    logger.error("💥 Failed to restore all merchant documents", e);
-                    span.recordException(e);
-                    span.setStatus(StatusCode.ERROR, e.getMessage());
-                })
-                .eventually(() -> {
-                    span.end();
-                    double duration = (System.currentTimeMillis() - startTime) / 1000.0;
-                    requestDurationSeconds.record(duration, Attributes.of(
-                                    AttributeKey.stringKey("operation"), "restore_all"));
-                });
-    }
-
-    @Override
-    @WithTransaction
-    public Uni<ApiResponse<Boolean>> deleteAllPermanent() {
-        long startTime = System.currentTimeMillis();
-        Span span = tracer.spanBuilder("deleteAllPermanentMerchantDocuments")
-                        .setSpanKind(SpanKind.SERVER)
-                        .setAttribute("service.name", "merchant-document-command-service")
-                        .setAttribute("operation", "delete_all_permanent")
-                        .startSpan();
-
-        logger.info("🗑️ Permanently deleting all trashed merchant documents");
-
-        return merchantDocumentCommandRepository.deleteAllDeleted()
-                .map(success -> {
-                    span.setStatus(StatusCode.OK);
-                    return ApiResponse.success("All trashed merchant documents permanently deleted", success);
-                })
-                .onFailure().invoke(e -> {
-                    logger.error("💥 Failed to permanently delete all merchant documents", e);
-                    span.recordException(e);
-                    span.setStatus(StatusCode.ERROR, e.getMessage());
-                })
-                .eventually(() -> {
-                    span.end();
-                    double duration = (System.currentTimeMillis() - startTime) / 1000.0;
-                    requestDurationSeconds.record(duration, Attributes.of(
-                                    AttributeKey.stringKey("operation"), "delete_all_permanent"));
-                });
-    }
+        private <T> Uni<T> runTraced(String operationName, String method, Attributes attributes,
+                        java.util.function.Supplier<Uni<T>> supplier) {
+                return tracingMetrics.traceAndMeasure(operationName, method, attributes, supplier);
+        }
 }

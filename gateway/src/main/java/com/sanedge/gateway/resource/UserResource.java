@@ -4,6 +4,7 @@ import org.eclipse.microprofile.openapi.annotations.Operation;
 import org.eclipse.microprofile.openapi.annotations.tags.Tag;
 
 import com.sanedge.gateway.dto.UserDto;
+import com.sanedge.gateway.domain.requests.FindAllUsersRequest;
 import com.sanedge.gateway.service.UserService;
 
 import io.smallrye.mutiny.Uni;
@@ -39,7 +40,8 @@ public class UserResource {
                         @QueryParam("page") @DefaultValue("1") int page,
                         @QueryParam("size") @DefaultValue("20") int size,
                         @QueryParam("search") String search) {
-                return userService.listUsers(page, size, search)
+                FindAllUsersRequest request = new FindAllUsersRequest(search, page, size);
+                return userService.listUsers(request)
                                 .map(res -> Response.ok(res).build());
         }
 
@@ -51,7 +53,8 @@ public class UserResource {
                         @QueryParam("page") @DefaultValue("1") int page,
                         @QueryParam("size") @DefaultValue("20") int size,
                         @QueryParam("search") String search) {
-                return userService.getActiveUsers(page, size, search)
+                FindAllUsersRequest request = new FindAllUsersRequest(search, page, size);
+                return userService.getActiveUsers(request)
                                 .map(res -> Response.ok(res).build());
         }
 
@@ -63,7 +66,8 @@ public class UserResource {
                         @QueryParam("page") @DefaultValue("1") int page,
                         @QueryParam("size") @DefaultValue("20") int size,
                         @QueryParam("search") String search) {
-                return userService.getTrashedUsers(page, size, search)
+                FindAllUsersRequest request = new FindAllUsersRequest(search, page, size);
+                return userService.getTrashedUsers(request)
                                 .map(res -> Response.ok(res).build());
         }
 

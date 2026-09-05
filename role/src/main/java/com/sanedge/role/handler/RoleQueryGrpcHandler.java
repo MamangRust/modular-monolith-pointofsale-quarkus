@@ -1,14 +1,11 @@
 package com.sanedge.role.handler;
 
-import java.util.List;
-
-import com.sanedge.common.domain.response.ApiResponsePagination;
 import com.sanedge.role.domain.requests.FindAllRoles;
 import com.sanedge.role.domain.response.RoleResponse;
 import com.sanedge.role.domain.response.RoleResponseDeleteAt;
 import com.sanedge.role.service.RoleQueryService;
 
-import io.grpc.Status;
+import com.sanedge.common.grpc.GrpcErrorMapper;
 import io.quarkus.grpc.GrpcService;
 import io.smallrye.mutiny.Uni;
 import jakarta.inject.Inject;
@@ -51,7 +48,7 @@ public class RoleQueryGrpcHandler extends MutinyRoleServiceGrpc.RoleServiceImplB
                     }
                     return builder.build();
                 })
-                .onFailure().transform(e -> Status.INTERNAL.withDescription(e.getMessage()).asRuntimeException());
+                .onFailure().transform(GrpcErrorMapper::toStatusRuntimeException);
     }
 
     @Override
@@ -66,12 +63,7 @@ public class RoleQueryGrpcHandler extends MutinyRoleServiceGrpc.RoleServiceImplB
                     }
                     return builder.build();
                 })
-                .onFailure().transform(e -> {
-                    if (e instanceof jakarta.ws.rs.NotFoundException) {
-                        return Status.NOT_FOUND.withDescription(e.getMessage()).asRuntimeException();
-                    }
-                    return Status.INTERNAL.withDescription(e.getMessage()).asRuntimeException();
-                });
+                .onFailure().transform(GrpcErrorMapper::toStatusRuntimeException);
     }
 
     @Override
@@ -86,12 +78,7 @@ public class RoleQueryGrpcHandler extends MutinyRoleServiceGrpc.RoleServiceImplB
                     }
                     return builder.build();
                 })
-                .onFailure().transform(e -> {
-                    if (e instanceof jakarta.ws.rs.NotFoundException) {
-                        return Status.NOT_FOUND.withDescription(e.getMessage()).asRuntimeException();
-                    }
-                    return Status.INTERNAL.withDescription(e.getMessage()).asRuntimeException();
-                });
+                .onFailure().transform(GrpcErrorMapper::toStatusRuntimeException);
     }
 
     @Override
@@ -116,7 +103,7 @@ public class RoleQueryGrpcHandler extends MutinyRoleServiceGrpc.RoleServiceImplB
                     }
                     return builder.build();
                 })
-                .onFailure().transform(e -> Status.INTERNAL.withDescription(e.getMessage()).asRuntimeException());
+                .onFailure().transform(GrpcErrorMapper::toStatusRuntimeException);
     }
 
     @Override
@@ -141,7 +128,7 @@ public class RoleQueryGrpcHandler extends MutinyRoleServiceGrpc.RoleServiceImplB
                     }
                     return builder.build();
                 })
-                .onFailure().transform(e -> Status.INTERNAL.withDescription(e.getMessage()).asRuntimeException());
+                .onFailure().transform(GrpcErrorMapper::toStatusRuntimeException);
     }
 
     @Override
@@ -158,7 +145,7 @@ public class RoleQueryGrpcHandler extends MutinyRoleServiceGrpc.RoleServiceImplB
                     }
                     return builder.build();
                 })
-                .onFailure().transform(e -> Status.INTERNAL.withDescription(e.getMessage()).asRuntimeException());
+                .onFailure().transform(GrpcErrorMapper::toStatusRuntimeException);
     }
 
     private pb.role.Role.RoleResponse toProto(RoleResponse r) {

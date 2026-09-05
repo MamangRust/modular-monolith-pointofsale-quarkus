@@ -3,6 +3,7 @@ package com.sanedge.transaction.repository.stats;
 import java.util.ArrayList;
 import java.util.List;
 
+import com.sanedge.transaction.domain.requests.FindTransactionMonthRange;
 import com.sanedge.transaction.entity.Transaction;
 import com.sanedge.transaction.entity.TransactionMonthlyMethod;
 import com.sanedge.transaction.entity.TransactionYearMethod;
@@ -15,8 +16,7 @@ import jakarta.enterprise.context.ApplicationScoped;
 @ApplicationScoped
 public class TransactionMethodRepository implements PanacheRepository<Transaction> {
 
-    public Uni<List<TransactionMonthlyMethod>> findMonthlyMethodsSuccess(
-            Integer year1, Integer month1, Integer year2, Integer month2) {
+    public Uni<List<TransactionMonthlyMethod>> findMonthlyMethodsSuccess(FindTransactionMonthRange req) {
         String sql = """
             WITH
                 date_ranges AS (
@@ -78,10 +78,10 @@ public class TransactionMethodRepository implements PanacheRepository<Transactio
 
         return Panache.getSession()
                 .chain(session -> session.createNativeQuery(sql)
-                        .setParameter("year1", year1)
-                        .setParameter("month1", month1)
-                        .setParameter("year2", year2)
-                        .setParameter("month2", month2)
+                        .setParameter("year1", req.getStartYear())
+                        .setParameter("month1", req.getStartMonth())
+                        .setParameter("year2", req.getEndYear())
+                        .setParameter("month2", req.getEndMonth())
                         .getResultList())
                 .map(rawList -> {
                     List<TransactionMonthlyMethod> list = new ArrayList<>();
@@ -98,8 +98,7 @@ public class TransactionMethodRepository implements PanacheRepository<Transactio
                 });
     }
 
-    public Uni<List<TransactionMonthlyMethod>> findMonthlyMethodsFailed(
-            Integer year1, Integer month1, Integer year2, Integer month2) {
+    public Uni<List<TransactionMonthlyMethod>> findMonthlyMethodsFailed(FindTransactionMonthRange req) {
         String sql = """
             WITH
                 date_ranges AS (
@@ -161,10 +160,10 @@ public class TransactionMethodRepository implements PanacheRepository<Transactio
 
         return Panache.getSession()
                 .chain(session -> session.createNativeQuery(sql)
-                        .setParameter("year1", year1)
-                        .setParameter("month1", month1)
-                        .setParameter("year2", year2)
-                        .setParameter("month2", month2)
+                        .setParameter("year1", req.getStartYear())
+                        .setParameter("month1", req.getStartMonth())
+                        .setParameter("year2", req.getEndYear())
+                        .setParameter("month2", req.getEndMonth())
                         .getResultList())
                 .map(rawList -> {
                     List<TransactionMonthlyMethod> list = new ArrayList<>();
@@ -186,8 +185,8 @@ public class TransactionMethodRepository implements PanacheRepository<Transactio
             WITH
                 year_range AS (
                     SELECT
-                        :year - 1 AS start_year,
-                        :year AS end_year
+                        CAST(:year AS INTEGER) - 1 AS start_year,
+                        CAST(:year AS INTEGER) AS end_year
                 ),
                 payment_methods AS (
                     SELECT DISTINCT payment_method
@@ -254,8 +253,8 @@ public class TransactionMethodRepository implements PanacheRepository<Transactio
             WITH
                 year_range AS (
                     SELECT
-                        :year - 1 AS start_year,
-                        :year AS end_year
+                        CAST(:year AS INTEGER) - 1 AS start_year,
+                        CAST(:year AS INTEGER) AS end_year
                 ),
                 payment_methods AS (
                     SELECT DISTINCT payment_method

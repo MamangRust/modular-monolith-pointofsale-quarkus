@@ -19,6 +19,7 @@ public class GrpcExceptionMapper implements ExceptionMapper<StatusRuntimeExcepti
             case FAILED_PRECONDITION -> 422;
             case PERMISSION_DENIED -> 403;
             case UNAUTHENTICATED -> 401;
+            case RESOURCE_EXHAUSTED -> 429;
             case UNAVAILABLE -> 503;
             case DEADLINE_EXCEEDED -> 504;
             default -> 500;

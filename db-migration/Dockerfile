@@ -2,26 +2,9 @@
 FROM maven:3.9.6-eclipse-temurin-21 AS build
 WORKDIR /app
 
-COPY pom.xml .
-COPY common/pom.xml common/
-COPY db-migration/pom.xml db-migration/
-COPY gateway/pom.xml gateway/
-COPY auth/pom.xml auth/
-COPY card/pom.xml card/
-COPY merchant/pom.xml merchant/
-COPY role/pom.xml role/
-COPY saldo/pom.xml saldo/
-COPY topup/pom.xml topup/
-COPY transaction/pom.xml transaction/
-COPY transfer/pom.xml transfer/
-COPY user/pom.xml user/
-COPY withdraw/pom.xml withdraw/
-COPY email-service/pom.xml email-service/
+COPY . .
 
-COPY common/src common/src
-COPY db-migration/src db-migration/src
-
-RUN mvn clean package -pl db-migration -am -DskipTests -q
+RUN --mount=type=cache,target=/root/.m2 mvn clean package -pl db-migration -am -DskipTests -q
 
 # ---- Runtime Stage ----
 FROM eclipse-temurin:21-jre-alpine

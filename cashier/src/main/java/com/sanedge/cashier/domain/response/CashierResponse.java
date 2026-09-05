@@ -3,11 +3,15 @@ package com.sanedge.cashier.domain.response;
 import com.sanedge.cashier.entity.Cashier;
 
 import io.swagger.v3.oas.annotations.media.Schema;
+import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 
 @Data
 @Builder
+@AllArgsConstructor
+@NoArgsConstructor
 @Schema(name = "CashierResponse", description = "Response untuk kasir")
 public class CashierResponse {
     private Integer id;

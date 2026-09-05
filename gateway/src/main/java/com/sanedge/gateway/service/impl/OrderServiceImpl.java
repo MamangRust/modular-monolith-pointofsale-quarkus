@@ -1,6 +1,10 @@
 package com.sanedge.gateway.service.impl;
 
 import com.sanedge.gateway.dto.OrderDto;
+import com.sanedge.gateway.domain.requests.FindAllOrdersRequest;
+import com.sanedge.gateway.domain.requests.FindOrdersByMerchantRequest;
+import com.sanedge.gateway.domain.requests.GetOrderMonthlyTotalRevenueRequest;
+import com.sanedge.gateway.domain.requests.GetOrderMonthlyTotalRevenueByMerchantRequest;
 import com.sanedge.gateway.service.OrderService;
 import com.sanedge.gateway.telemetry.TelemetryHelper;
 import io.quarkus.grpc.GrpcClient;
@@ -32,12 +36,12 @@ public class OrderServiceImpl implements OrderService {
     pb.order.stats.MutinyOrderSoldoutServiceGrpc.MutinyOrderSoldoutServiceStub orderSoldoutServiceStub;
 
     @Override
-    public Uni<OrderDto.ApiResponsePaginationOrder> listOrders(int page, int size, String search) {
+    public Uni<OrderDto.ApiResponsePaginationOrder> listOrders(FindAllOrdersRequest request) {
         return telemetryHelper.traceAndMetric("order.listOrders",
                 () -> orderQueryService.findAll(pb.order.Order.FindAllOrderRequest.newBuilder()
-                        .setPage(page)
-                        .setPageSize(size)
-                        .setSearch(search == null ? "" : search)
+                        .setPage(request.getPage())
+                        .setPageSize(request.getSize())
+                        .setSearch(request.getSearch() == null ? "" : request.getSearch())
                         .build())
                         .map(OrderDto.ApiResponsePaginationOrder::from)
                         .onFailure()
@@ -57,30 +61,29 @@ public class OrderServiceImpl implements OrderService {
     }
 
     @Override
-    public Uni<OrderDto.ApiResponsePaginationOrder> listOrdersByMerchant(int merchantId, int page, int size,
-            String search) {
+    public Uni<OrderDto.ApiResponsePaginationOrder> listOrdersByMerchant(FindOrdersByMerchantRequest request) {
         return telemetryHelper.traceAndMetric("order.listOrdersByMerchant",
                 () -> orderQueryService
                         .findByMerchant(pb.order.Order.FindAllOrderMerchantRequest.newBuilder()
-                                .setMerchantId(merchantId)
-                                .setPage(page)
-                                .setPageSize(size)
-                                .setSearch(search == null ? "" : search)
+                                .setMerchantId(request.getMerchantId())
+                                .setPage(request.getPage())
+                                .setPageSize(request.getSize())
+                                .setSearch(request.getSearch() == null ? "" : request.getSearch())
                                 .build())
                         .map(OrderDto.ApiResponsePaginationOrder::from)
                         .onFailure()
-                        .invoke(throwable -> LOG.error("Failed to list orders by merchant " + merchantId + ": "
+                        .invoke(throwable -> LOG.error("Failed to list orders by merchant " + request.getMerchantId() + ": "
                                 + throwable.getMessage(), throwable)));
     }
 
     @Override
-    public Uni<OrderDto.ApiResponsePaginationOrderDeleteAt> getActiveOrders(int page, int size, String search) {
+    public Uni<OrderDto.ApiResponsePaginationOrderDeleteAt> getActiveOrders(FindAllOrdersRequest request) {
         return telemetryHelper.traceAndMetric("order.getActiveOrders",
                 () -> orderQueryService
                         .findByActive(pb.order.Order.FindAllOrderRequest.newBuilder()
-                                .setPage(page)
-                                .setPageSize(size)
-                                .setSearch(search == null ? "" : search)
+                                .setPage(request.getPage())
+                                .setPageSize(request.getSize())
+                                .setSearch(request.getSearch() == null ? "" : request.getSearch())
                                 .build())
                         .map(OrderDto.ApiResponsePaginationOrderDeleteAt::from)
                         .onFailure()
@@ -89,12 +92,12 @@ public class OrderServiceImpl implements OrderService {
     }
 
     @Override
-    public Uni<OrderDto.ApiResponsePaginationOrderDeleteAt> getTrashedOrders(int page, int size, String search) {
+    public Uni<OrderDto.ApiResponsePaginationOrderDeleteAt> getTrashedOrders(FindAllOrdersRequest request) {
         return telemetryHelper.traceAndMetric("order.getTrashedOrders",
                 () -> orderQueryService.findByTrashed(pb.order.Order.FindAllOrderRequest.newBuilder()
-                        .setPage(page)
-                        .setPageSize(size)
-                        .setSearch(search == null ? "" : search)
+                        .setPage(request.getPage())
+                        .setPageSize(request.getSize())
+                        .setSearch(request.getSearch() == null ? "" : request.getSearch())
                         .build())
                         .map(OrderDto.ApiResponsePaginationOrderDeleteAt::from)
                         .onFailure()
@@ -229,13 +232,12 @@ public class OrderServiceImpl implements OrderService {
     }
 
     @Override
-    public Uni<OrderDto.ApiResponseOrderMonthlyTotalRevenue> getMonthlyTotalRevenueById(int orderId, int year,
-            int month) {
+    public Uni<OrderDto.ApiResponseOrderMonthlyTotalRevenue> getMonthlyTotalRevenueById(GetOrderMonthlyTotalRevenueRequest request) {
         return telemetryHelper.traceAndMetric("order.getMonthlyTotalRevenueById", () -> orderTotalRevenueServiceStub
                 .findMonthlyTotalRevenueById(pb.order.Order.FindYearMonthTotalRevenueById.newBuilder()
-                        .setOrderId(orderId)
-                        .setYear(year)
-                        .setMonth(month)
+                        .setOrderId(request.getOrderId())
+                        .setYear(request.getYear())
+                        .setMonth(request.getMonth())
                         .build())
                 .map(OrderDto.ApiResponseOrderMonthlyTotalRevenue::from)
                 .onFailure().invoke(throwable -> LOG
@@ -255,13 +257,12 @@ public class OrderServiceImpl implements OrderService {
     }
 
     @Override
-    public Uni<OrderDto.ApiResponseOrderMonthlyTotalRevenue> getMonthlyTotalRevenueByMerchant(int merchantId, int year,
-            int month) {
+    public Uni<OrderDto.ApiResponseOrderMonthlyTotalRevenue> getMonthlyTotalRevenueByMerchant(GetOrderMonthlyTotalRevenueByMerchantRequest request) {
         return telemetryHelper.traceAndMetric("order.getMonthlyTotalRevenueByMerchant", () -> orderTotalRevenueServiceStub
                 .findMonthlyTotalRevenueByMerchant(pb.order.Order.FindYearMonthTotalRevenueByMerchant.newBuilder()
-                        .setMerchantId(merchantId)
-                        .setYear(year)
-                        .setMonth(month)
+                        .setMerchantId(request.getMerchantId())
+                        .setYear(request.getYear())
+                        .setMonth(request.getMonth())
                         .build())
                 .map(OrderDto.ApiResponseOrderMonthlyTotalRevenue::from)
                 .onFailure().invoke(throwable -> LOG.error(

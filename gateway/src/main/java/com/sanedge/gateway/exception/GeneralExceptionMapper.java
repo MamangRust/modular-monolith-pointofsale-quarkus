@@ -31,7 +31,9 @@ public class GeneralExceptionMapper implements ExceptionMapper<Throwable> {
 
         Log.error("An unexpected gateway error occurred", exception);
 
-        ApiResponse<Void> errorResponse = ApiResponse.error("An internal gateway error occurred: " + exception.getMessage());
+        // Do NOT leak exception.getMessage() to the client: internal details
+        // (SQL, stack context, host names) stay in the server logs only.
+        ApiResponse<Void> errorResponse = ApiResponse.error("An internal gateway error occurred.");
         return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
                 .type(MediaType.APPLICATION_JSON)
                 .entity(errorResponse)

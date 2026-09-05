@@ -3,6 +3,10 @@ package com.sanedge.gateway.resource;
 import org.eclipse.microprofile.openapi.annotations.Operation;
 import org.eclipse.microprofile.openapi.annotations.tags.Tag;
 
+import com.sanedge.gateway.domain.requests.FindAllOrdersRequest;
+import com.sanedge.gateway.domain.requests.FindOrdersByMerchantRequest;
+import com.sanedge.gateway.domain.requests.GetOrderMonthlyTotalRevenueRequest;
+import com.sanedge.gateway.domain.requests.GetOrderMonthlyTotalRevenueByMerchantRequest;
 import com.sanedge.gateway.dto.OrderDto;
 import com.sanedge.gateway.service.OrderService;
 
@@ -39,7 +43,8 @@ public class OrderResource {
                         @QueryParam("page") @DefaultValue("1") int page,
                         @QueryParam("size") @DefaultValue("20") int size,
                         @QueryParam("search") String search) {
-                return orderService.listOrders(page, size, search)
+                FindAllOrdersRequest request = new FindAllOrdersRequest(search, page, size);
+                return orderService.listOrders(request)
                                 .map(res -> Response.ok(res).build());
         }
 
@@ -61,7 +66,8 @@ public class OrderResource {
                         @QueryParam("page") @DefaultValue("1") int page,
                         @QueryParam("size") @DefaultValue("20") int size,
                         @QueryParam("search") String search) {
-                return orderService.listOrdersByMerchant(merchantId, page, size, search)
+                FindOrdersByMerchantRequest request = new FindOrdersByMerchantRequest(merchantId, page, size, search);
+                return orderService.listOrdersByMerchant(request)
                                 .map(res -> Response.ok(res).build());
         }
 
@@ -73,7 +79,8 @@ public class OrderResource {
                         @QueryParam("page") @DefaultValue("1") int page,
                         @QueryParam("size") @DefaultValue("20") int size,
                         @QueryParam("search") String search) {
-                return orderService.getActiveOrders(page, size, search)
+                FindAllOrdersRequest request = new FindAllOrdersRequest(search, page, size);
+                return orderService.getActiveOrders(request)
                                 .map(res -> Response.ok(res).build());
         }
 
@@ -85,7 +92,8 @@ public class OrderResource {
                         @QueryParam("page") @DefaultValue("1") int page,
                         @QueryParam("size") @DefaultValue("20") int size,
                         @QueryParam("search") String search) {
-                return orderService.getTrashedOrders(page, size, search)
+                FindAllOrdersRequest request = new FindAllOrdersRequest(search, page, size);
+                return orderService.getTrashedOrders(request)
                                 .map(res -> Response.ok(res).build());
         }
 
@@ -181,7 +189,8 @@ public class OrderResource {
                         @PathParam("orderId") int orderId,
                         @QueryParam("year") int year,
                         @QueryParam("month") int month) {
-                return orderService.getMonthlyTotalRevenueById(orderId, year, month)
+                GetOrderMonthlyTotalRevenueRequest request = new GetOrderMonthlyTotalRevenueRequest(orderId, year, month);
+                return orderService.getMonthlyTotalRevenueById(request)
                                 .map(res -> Response.ok(res).build());
         }
 
@@ -204,7 +213,8 @@ public class OrderResource {
                         @PathParam("merchantId") int merchantId,
                         @QueryParam("year") int year,
                         @QueryParam("month") int month) {
-                return orderService.getMonthlyTotalRevenueByMerchant(merchantId, year, month)
+                GetOrderMonthlyTotalRevenueByMerchantRequest request = new GetOrderMonthlyTotalRevenueByMerchantRequest(merchantId, year, month);
+                return orderService.getMonthlyTotalRevenueByMerchant(request)
                                 .map(res -> Response.ok(res).build());
         }
 

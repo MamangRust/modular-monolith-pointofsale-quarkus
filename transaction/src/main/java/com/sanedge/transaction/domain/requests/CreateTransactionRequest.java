@@ -28,4 +28,7 @@ public class CreateTransactionRequest {
 
     @Schema(description = "Status pembayaran (opsional)", example = "PAID")
     private String paymentStatus;
+
+    @Schema(description = "Idempotency key klien (replay aman, opsional)", example = "ord-100-cash-20260814")
+    private String idempotencyKey;
 }

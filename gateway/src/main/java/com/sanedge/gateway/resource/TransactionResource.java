@@ -3,6 +3,10 @@ package com.sanedge.gateway.resource;
 import org.eclipse.microprofile.openapi.annotations.Operation;
 import org.eclipse.microprofile.openapi.annotations.tags.Tag;
 
+import com.sanedge.gateway.domain.requests.FindAllTransactionsRequest;
+import com.sanedge.gateway.domain.requests.FindTransactionsByCardNumberRequest;
+import com.sanedge.gateway.domain.requests.GetTransactionStatusFailedByCardNumberRequest;
+import com.sanedge.gateway.domain.requests.GetTransactionStatusSuccessByCardNumberRequest;
 import com.sanedge.gateway.dto.TransactionDto;
 import com.sanedge.gateway.service.TransactionService;
 
@@ -39,7 +43,8 @@ public class TransactionResource {
                         @QueryParam("page") @DefaultValue("1") int page,
                         @QueryParam("size") @DefaultValue("20") int size,
                         @QueryParam("search") String search) {
-                return transactionService.listTransactions(page, size, search)
+                FindAllTransactionsRequest request = new FindAllTransactionsRequest(search, page, size);
+                return transactionService.listTransactions(request)
                                 .map(res -> Response.ok(res).build());
         }
 
@@ -52,7 +57,8 @@ public class TransactionResource {
                         @QueryParam("page") @DefaultValue("1") int page,
                         @QueryParam("size") @DefaultValue("20") int size,
                         @QueryParam("search") String search) {
-                return transactionService.listTransactionsByCardNumber(cardNumber, page, size, search)
+                FindTransactionsByCardNumberRequest request = new FindTransactionsByCardNumberRequest(cardNumber, page, size, search);
+                return transactionService.listTransactionsByCardNumber(request)
                                 .map(res -> Response.ok(res).build());
         }
 
@@ -82,7 +88,8 @@ public class TransactionResource {
                         @QueryParam("page") @DefaultValue("1") int page,
                         @QueryParam("size") @DefaultValue("20") int size,
                         @QueryParam("search") String search) {
-                return transactionService.getActiveTransactions(page, size, search)
+                FindAllTransactionsRequest request = new FindAllTransactionsRequest(search, page, size);
+                return transactionService.getActiveTransactions(request)
                                 .map(res -> Response.ok(res).build());
         }
 
@@ -94,7 +101,8 @@ public class TransactionResource {
                         @QueryParam("page") @DefaultValue("1") int page,
                         @QueryParam("size") @DefaultValue("20") int size,
                         @QueryParam("search") String search) {
-                return transactionService.getTrashedTransactions(page, size, search)
+                FindAllTransactionsRequest request = new FindAllTransactionsRequest(search, page, size);
+                return transactionService.getTrashedTransactions(request)
                                 .map(res -> Response.ok(res).build());
         }
 
@@ -296,7 +304,8 @@ public class TransactionResource {
                         @PathParam("cardNumber") String cardNumber,
                         @QueryParam("year") int year,
                         @QueryParam("month") int month) {
-                return transactionService.getMonthlyTransactionStatusSuccessByCardNumber(cardNumber, year, month)
+                GetTransactionStatusSuccessByCardNumberRequest request = new GetTransactionStatusSuccessByCardNumberRequest(cardNumber, year, month);
+                return transactionService.getMonthlyTransactionStatusSuccessByCardNumber(request)
                                 .map(res -> Response.ok(res).build());
         }
 
@@ -319,7 +328,8 @@ public class TransactionResource {
                         @PathParam("cardNumber") String cardNumber,
                         @QueryParam("year") int year,
                         @QueryParam("month") int month) {
-                return transactionService.getMonthlyTransactionStatusFailedByCardNumber(cardNumber, year, month)
+                GetTransactionStatusFailedByCardNumberRequest request = new GetTransactionStatusFailedByCardNumberRequest(cardNumber, year, month);
+                return transactionService.getMonthlyTransactionStatusFailedByCardNumber(request)
                                 .map(res -> Response.ok(res).build());
         }
 

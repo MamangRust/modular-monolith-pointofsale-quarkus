@@ -4,6 +4,9 @@ import org.eclipse.microprofile.openapi.annotations.Operation;
 import org.eclipse.microprofile.openapi.annotations.tags.Tag;
 
 import com.sanedge.gateway.dto.CategoryDto;
+import com.sanedge.gateway.domain.requests.FindAllCategoriesRequest;
+import com.sanedge.gateway.domain.requests.GetCategoryMonthlyTotalRequest;
+import com.sanedge.gateway.domain.requests.GetCategoryMonthlyTotalByMerchantRequest;
 import com.sanedge.gateway.service.CategoryService;
 
 import io.smallrye.mutiny.Uni;
@@ -39,7 +42,8 @@ public class CategoryResource {
                         @QueryParam("page") @DefaultValue("1") int page,
                         @QueryParam("size") @DefaultValue("20") int size,
                         @QueryParam("search") String search) {
-                return categoryService.listCategories(page, size, search)
+                FindAllCategoriesRequest request = new FindAllCategoriesRequest(search, page, size);
+                return categoryService.listCategories(request)
                                 .map(res -> Response.ok(res).build());
         }
 
@@ -60,7 +64,8 @@ public class CategoryResource {
                         @QueryParam("page") @DefaultValue("1") int page,
                         @QueryParam("size") @DefaultValue("20") int size,
                         @QueryParam("search") String search) {
-                return categoryService.getActiveCategories(page, size, search)
+                FindAllCategoriesRequest request = new FindAllCategoriesRequest(search, page, size);
+                return categoryService.getActiveCategories(request)
                                 .map(res -> Response.ok(res).build());
         }
 
@@ -72,7 +77,8 @@ public class CategoryResource {
                         @QueryParam("page") @DefaultValue("1") int page,
                         @QueryParam("size") @DefaultValue("20") int size,
                         @QueryParam("search") String search) {
-                return categoryService.getTrashedCategories(page, size, search)
+                FindAllCategoriesRequest request = new FindAllCategoriesRequest(search, page, size);
+                return categoryService.getTrashedCategories(request)
                                 .map(res -> Response.ok(res).build());
         }
 
@@ -168,7 +174,8 @@ public class CategoryResource {
                         @PathParam("categoryId") int categoryId,
                         @QueryParam("year") int year,
                         @QueryParam("month") int month) {
-                return categoryService.getMonthlyTotalPricesById(categoryId, year, month)
+                GetCategoryMonthlyTotalRequest request = new GetCategoryMonthlyTotalRequest(categoryId, year, month);
+                return categoryService.getMonthlyTotalPricesById(request)
                                 .map(res -> Response.ok(res).build());
         }
 
@@ -191,7 +198,8 @@ public class CategoryResource {
                         @PathParam("merchantId") int merchantId,
                         @QueryParam("year") int year,
                         @QueryParam("month") int month) {
-                return categoryService.getMonthlyTotalPricesByMerchant(merchantId, year, month)
+                GetCategoryMonthlyTotalByMerchantRequest request = new GetCategoryMonthlyTotalByMerchantRequest(merchantId, year, month);
+                return categoryService.getMonthlyTotalPricesByMerchant(request)
                                 .map(res -> Response.ok(res).build());
         }
 

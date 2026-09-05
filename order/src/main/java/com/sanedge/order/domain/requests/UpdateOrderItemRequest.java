@@ -22,7 +22,6 @@ public class UpdateOrderItemRequest {
     @Schema(description = "Jumlah produk", example = "2")
     private Integer quantity;
 
-    @NotNull
-    @Schema(description = "Harga per item", example = "50000")
+    @Schema(description = "Harga per item (optional — falls back to product price)", example = "50000")
     private Integer price;
 }

@@ -1,14 +1,17 @@
 package com.sanedge.order.handler;
 
 import com.sanedge.order.domain.requests.MonthTotalRevenue;
+import com.sanedge.order.domain.requests.MonthTotalRevenueByIdRequest;
 import com.sanedge.order.domain.requests.MonthTotalRevenueMerchantRequest;
+import com.sanedge.order.domain.requests.YearTotalRevenueByIdRequest;
 import com.sanedge.order.domain.requests.YearTotalRevenueMerchantRequest;
 import com.sanedge.order.domain.response.OrderMonthlyTotalRevenueResponse;
 import com.sanedge.order.domain.response.OrderYearlyTotalRevenueResponse;
 import com.sanedge.order.service.stats.OrderTotalRevenueService;
+import com.sanedge.order.service.statsbyid.OrderTotalRevenueByIdService;
 import com.sanedge.order.service.statsbymerchant.OrderTotalRevenueByMerchantService;
 
-import io.grpc.Status;
+import com.sanedge.common.grpc.GrpcErrorMapper;
 import io.quarkus.grpc.GrpcService;
 import io.smallrye.mutiny.Uni;
 import jakarta.inject.Inject;
@@ -33,6 +36,9 @@ public class OrderTotalRevenueGrpcHandler extends MutinyOrderTotalRevenueService
     @Inject
     OrderTotalRevenueByMerchantService orderTotalRevenueByMerchantService;
 
+    @Inject
+    OrderTotalRevenueByIdService orderTotalRevenueByIdService;
+
     @Override
     public Uni<ApiResponseOrderMonthlyTotalRevenue> findMonthlyTotalRevenue(FindYearMonthTotalRevenue request) {
         MonthTotalRevenue domainReq = new MonthTotalRevenue();
@@ -51,7 +57,7 @@ public class OrderTotalRevenueGrpcHandler extends MutinyOrderTotalRevenueService
                     }
                     return builder.build();
                 })
-                .onFailure().transform(e -> Status.INTERNAL.withDescription(e.getMessage()).asRuntimeException());
+                .onFailure().transform(GrpcErrorMapper::toStatusRuntimeException);
     }
 
     @Override
@@ -68,27 +74,50 @@ public class OrderTotalRevenueGrpcHandler extends MutinyOrderTotalRevenueService
                     }
                     return builder.build();
                 })
-                .onFailure().transform(e -> Status.INTERNAL.withDescription(e.getMessage()).asRuntimeException());
+                .onFailure().transform(GrpcErrorMapper::toStatusRuntimeException);
     }
 
     @Override
     public Uni<ApiResponseOrderMonthlyTotalRevenue> findMonthlyTotalRevenueById(FindYearMonthTotalRevenueById request) {
-        return Uni.createFrom().item(
-                ApiResponseOrderMonthlyTotalRevenue.newBuilder()
-                        .setStatus("success")
-                        .setMessage("No monthly total revenue stats by order ID are available")
-                        .build()
-        );
+        MonthTotalRevenueByIdRequest domainReq = new MonthTotalRevenueByIdRequest();
+        domainReq.setOrderId((long) request.getOrderId());
+        domainReq.setYear(request.getYear());
+        domainReq.setMonth(request.getMonth());
+
+        return orderTotalRevenueByIdService.findMonthlyStatsById(domainReq)
+                .map(apiResp -> {
+                    ApiResponseOrderMonthlyTotalRevenue.Builder builder = ApiResponseOrderMonthlyTotalRevenue.newBuilder()
+                            .setStatus(apiResp.status())
+                            .setMessage(apiResp.message());
+                    if (apiResp.data() != null) {
+                        for (var item : apiResp.data()) {
+                            builder.addData(toProto(item));
+                        }
+                    }
+                    return builder.build();
+                })
+                .onFailure().transform(GrpcErrorMapper::toStatusRuntimeException);
     }
 
     @Override
     public Uni<ApiResponseOrderYearlyTotalRevenue> findYearlyTotalRevenueById(FindYearTotalRevenueById request) {
-        return Uni.createFrom().item(
-                ApiResponseOrderYearlyTotalRevenue.newBuilder()
-                        .setStatus("success")
-                        .setMessage("No yearly total revenue stats by order ID are available")
-                        .build()
-        );
+        YearTotalRevenueByIdRequest domainReq = new YearTotalRevenueByIdRequest();
+        domainReq.setOrderId((long) request.getOrderId());
+        domainReq.setYear(request.getYear());
+
+        return orderTotalRevenueByIdService.findYearlyStatsById(domainReq)
+                .map(apiResp -> {
+                    ApiResponseOrderYearlyTotalRevenue.Builder builder = ApiResponseOrderYearlyTotalRevenue.newBuilder()
+                            .setStatus(apiResp.status())
+                            .setMessage(apiResp.message());
+                    if (apiResp.data() != null) {
+                        for (var item : apiResp.data()) {
+                            builder.addData(toProto(item));
+                        }
+                    }
+                    return builder.build();
+                })
+                .onFailure().transform(GrpcErrorMapper::toStatusRuntimeException);
     }
 
     @Override
@@ -110,7 +139,7 @@ public class OrderTotalRevenueGrpcHandler extends MutinyOrderTotalRevenueService
                     }
                     return builder.build();
                 })
-                .onFailure().transform(e -> Status.INTERNAL.withDescription(e.getMessage()).asRuntimeException());
+                .onFailure().transform(GrpcErrorMapper::toStatusRuntimeException);
     }
 
     @Override
@@ -131,7 +160,7 @@ public class OrderTotalRevenueGrpcHandler extends MutinyOrderTotalRevenueService
                     }
                     return builder.build();
                 })
-                .onFailure().transform(e -> Status.INTERNAL.withDescription(e.getMessage()).asRuntimeException());
+                .onFailure().transform(GrpcErrorMapper::toStatusRuntimeException);
     }
 
     private pb.order.Order.OrderMonthlyTotalRevenueResponse toProto(OrderMonthlyTotalRevenueResponse r) {

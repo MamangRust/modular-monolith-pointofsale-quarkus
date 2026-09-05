@@ -14,6 +14,9 @@ message FindAllOrderItemRequest {
 
 message FindByIdOrderItemRequest {
     int32 order_item_id = 1;
+    // Optional: when set, the handler looks up order items belonging to this
+    // order instead of a single order item by id.
+    int32 order_id = 2;
 }
 
 message OrderItemResponse {

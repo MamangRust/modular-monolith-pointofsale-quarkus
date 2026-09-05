@@ -23,7 +23,7 @@ public class UserRepository implements PanacheRepository<User> {
         var query = """
                     deletedAt IS NULL
                     AND (
-                        ?1 IS NULL
+                        CAST(?1 AS string) IS NULL
                         OR LOWER(firstname) LIKE LOWER(CONCAT('%', ?1, '%'))
                         OR LOWER(lastname)  LIKE LOWER(CONCAT('%', ?1, '%'))
                         OR LOWER(email)     LIKE LOWER(CONCAT('%', ?1, '%'))
@@ -46,7 +46,7 @@ public class UserRepository implements PanacheRepository<User> {
         var query = """
                     deletedAt IS NULL
                     AND (
-                        ?1 IS NULL
+                        CAST(?1 AS string) IS NULL
                         OR LOWER(firstname) LIKE LOWER(CONCAT('%', ?1, '%'))
                         OR LOWER(lastname)  LIKE LOWER(CONCAT('%', ?1, '%'))
                         OR LOWER(email)     LIKE LOWER(CONCAT('%', ?1, '%'))
@@ -69,7 +69,7 @@ public class UserRepository implements PanacheRepository<User> {
         var query = """
                     deletedAt IS NOT NULL
                     AND (
-                        ?1 IS NULL
+                        CAST(?1 AS string) IS NULL
                         OR LOWER(firstname) LIKE LOWER(CONCAT('%', ?1, '%'))
                         OR LOWER(lastname)  LIKE LOWER(CONCAT('%', ?1, '%'))
                         OR LOWER(email)     LIKE LOWER(CONCAT('%', ?1, '%'))

@@ -1,6 +1,7 @@
 package com.sanedge.gateway.service.impl;
 
 import com.sanedge.gateway.dto.RoleDto;
+import com.sanedge.gateway.domain.requests.FindAllRolesRequest;
 import com.sanedge.gateway.service.RoleService;
 import com.sanedge.gateway.telemetry.TelemetryHelper;
 import io.quarkus.grpc.GrpcClient;
@@ -24,12 +25,12 @@ public class RoleServiceImpl implements RoleService {
     pb.role.MutinyRoleCommandServiceGrpc.MutinyRoleCommandServiceStub roleCommandService;
 
     @Override
-    public Uni<RoleDto.ApiResponsePaginationRole> listRoles(int page, int size, String search) {
+    public Uni<RoleDto.ApiResponsePaginationRole> listRoles(FindAllRolesRequest request) {
         return telemetryHelper.traceAndMetric("role.listRoles", () -> 
             roleQueryService.findAllRole(pb.role.Role.FindAllRoleRequest.newBuilder()
-                    .setPage(page)
-                    .setPageSize(size)
-                    .setSearch(search == null ? "" : search)
+                    .setPage(request.getPage())
+                    .setPageSize(request.getSize())
+                    .setSearch(request.getSearch() == null ? "" : request.getSearch())
                     .build())
                     .map(RoleDto.ApiResponsePaginationRole::from)
                     .onFailure().invoke(throwable -> LOG.error("Failed to list roles: " + throwable.getMessage(), throwable))
@@ -48,12 +49,12 @@ public class RoleServiceImpl implements RoleService {
     }
 
     @Override
-    public Uni<RoleDto.ApiResponsePaginationRoleDeleteAt> getActiveRoles(int page, int size, String search) {
+    public Uni<RoleDto.ApiResponsePaginationRoleDeleteAt> getActiveRoles(FindAllRolesRequest request) {
         return telemetryHelper.traceAndMetric("role.getActiveRoles", () -> 
             roleQueryService.findByActive(pb.role.Role.FindAllRoleRequest.newBuilder()
-                    .setPage(page)
-                    .setPageSize(size)
-                    .setSearch(search == null ? "" : search)
+                    .setPage(request.getPage())
+                    .setPageSize(request.getSize())
+                    .setSearch(request.getSearch() == null ? "" : request.getSearch())
                     .build())
                     .map(RoleDto.ApiResponsePaginationRoleDeleteAt::from)
                     .onFailure().invoke(throwable -> LOG.error("Failed to list active roles: " + throwable.getMessage(), throwable))
@@ -61,12 +62,12 @@ public class RoleServiceImpl implements RoleService {
     }
 
     @Override
-    public Uni<RoleDto.ApiResponsePaginationRoleDeleteAt> getTrashedRoles(int page, int size, String search) {
+    public Uni<RoleDto.ApiResponsePaginationRoleDeleteAt> getTrashedRoles(FindAllRolesRequest request) {
         return telemetryHelper.traceAndMetric("role.getTrashedRoles", () -> 
             roleQueryService.findByTrashed(pb.role.Role.FindAllRoleRequest.newBuilder()
-                    .setPage(page)
-                    .setPageSize(size)
-                    .setSearch(search == null ? "" : search)
+                    .setPage(request.getPage())
+                    .setPageSize(request.getSize())
+                    .setSearch(request.getSearch() == null ? "" : request.getSearch())
                     .build())
                     .map(RoleDto.ApiResponsePaginationRoleDeleteAt::from)
                     .onFailure().invoke(throwable -> LOG.error("Failed to list trashed roles: " + throwable.getMessage(), throwable))

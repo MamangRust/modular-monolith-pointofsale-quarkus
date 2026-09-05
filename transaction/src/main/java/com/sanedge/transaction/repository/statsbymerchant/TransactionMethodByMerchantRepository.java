@@ -3,6 +3,7 @@ package com.sanedge.transaction.repository.statsbymerchant;
 import java.util.ArrayList;
 import java.util.List;
 
+import com.sanedge.transaction.domain.requests.FindTransactionMonthMerchantRange;
 import com.sanedge.transaction.entity.Transaction;
 import com.sanedge.transaction.entity.TransactionMonthlyMethod;
 import com.sanedge.transaction.entity.TransactionYearMethod;
@@ -15,8 +16,7 @@ import jakarta.enterprise.context.ApplicationScoped;
 @ApplicationScoped
 public class TransactionMethodByMerchantRepository implements PanacheRepository<Transaction> {
 
-    public Uni<List<TransactionMonthlyMethod>> findMonthlyTransactionMethodsSuccessByMerchant(
-            Long merchantId, Integer year1, Integer month1, Integer year2, Integer month2) {
+    public Uni<List<TransactionMonthlyMethod>> findMonthlyTransactionMethodsSuccessByMerchant(FindTransactionMonthMerchantRange req) {
         String sql = """
             WITH
                 date_ranges AS (
@@ -81,11 +81,11 @@ public class TransactionMethodByMerchantRepository implements PanacheRepository<
 
         return Panache.getSession()
                 .chain(session -> session.createNativeQuery(sql)
-                        .setParameter("merchantId", merchantId)
-                        .setParameter("year1", year1)
-                        .setParameter("month1", month1)
-                        .setParameter("year2", year2)
-                        .setParameter("month2", month2)
+                        .setParameter("merchantId", req.getMerchantId())
+                        .setParameter("year1", req.getStartYear())
+                        .setParameter("month1", req.getStartMonth())
+                        .setParameter("year2", req.getEndYear())
+                        .setParameter("month2", req.getEndMonth())
                         .getResultList())
                 .map(rawList -> {
                     List<TransactionMonthlyMethod> list = new ArrayList<>();
@@ -102,8 +102,7 @@ public class TransactionMethodByMerchantRepository implements PanacheRepository<
                 });
     }
 
-    public Uni<List<TransactionMonthlyMethod>> findMonthlyTransactionMethodsFailedByMerchant(
-            Long merchantId, Integer year1, Integer month1, Integer year2, Integer month2) {
+    public Uni<List<TransactionMonthlyMethod>> findMonthlyTransactionMethodsFailedByMerchant(FindTransactionMonthMerchantRange req) {
         String sql = """
             WITH
                 date_ranges AS (
@@ -168,11 +167,11 @@ public class TransactionMethodByMerchantRepository implements PanacheRepository<
 
         return Panache.getSession()
                 .chain(session -> session.createNativeQuery(sql)
-                        .setParameter("merchantId", merchantId)
-                        .setParameter("year1", year1)
-                        .setParameter("month1", month1)
-                        .setParameter("year2", year2)
-                        .setParameter("month2", month2)
+                        .setParameter("merchantId", req.getMerchantId())
+                        .setParameter("year1", req.getStartYear())
+                        .setParameter("month1", req.getStartMonth())
+                        .setParameter("year2", req.getEndYear())
+                        .setParameter("month2", req.getEndMonth())
                         .getResultList())
                 .map(rawList -> {
                     List<TransactionMonthlyMethod> list = new ArrayList<>();
@@ -195,8 +194,8 @@ public class TransactionMethodByMerchantRepository implements PanacheRepository<
             WITH
                 year_range AS (
                     SELECT
-                        :year - 1 AS start_year,
-                        :year AS end_year
+                        CAST(:year AS INTEGER) - 1 AS start_year,
+                        CAST(:year AS INTEGER) AS end_year
                 ),
                 payment_methods AS (
                     SELECT DISTINCT payment_method
@@ -267,8 +266,8 @@ public class TransactionMethodByMerchantRepository implements PanacheRepository<
             WITH
                 year_range AS (
                     SELECT
-                        :year - 1 AS start_year,
-                        :year AS end_year
+                        CAST(:year AS INTEGER) - 1 AS start_year,
+                        CAST(:year AS INTEGER) AS end_year
                 ),
                 payment_methods AS (
                     SELECT DISTINCT payment_method

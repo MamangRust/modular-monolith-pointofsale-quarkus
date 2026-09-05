@@ -3,6 +3,7 @@ package com.sanedge.gateway.resource;
 import org.eclipse.microprofile.openapi.annotations.Operation;
 import org.eclipse.microprofile.openapi.annotations.tags.Tag;
 
+import com.sanedge.gateway.domain.requests.FindAllMerchantDocumentsRequest;
 import com.sanedge.gateway.dto.MerchantDocumentDto;
 import com.sanedge.gateway.service.MerchantDocumentService;
 
@@ -39,7 +40,8 @@ public class MerchantDocumentResource {
                         @QueryParam("page") @DefaultValue("1") int page,
                         @QueryParam("size") @DefaultValue("20") int size,
                         @QueryParam("search") String search) {
-                return merchantDocumentService.listMerchantDocuments(page, size, search)
+                FindAllMerchantDocumentsRequest request = new FindAllMerchantDocumentsRequest(search, page, size);
+                return merchantDocumentService.listMerchantDocuments(request)
                                 .map(res -> Response.ok(res).build());
         }
 
@@ -51,7 +53,8 @@ public class MerchantDocumentResource {
                         @QueryParam("page") @DefaultValue("1") int page,
                         @QueryParam("size") @DefaultValue("20") int size,
                         @QueryParam("search") String search) {
-                return merchantDocumentService.listActiveMerchantDocuments(page, size, search)
+                FindAllMerchantDocumentsRequest request = new FindAllMerchantDocumentsRequest(search, page, size);
+                return merchantDocumentService.listActiveMerchantDocuments(request)
                                 .map(res -> Response.ok(res).build());
         }
 
@@ -63,7 +66,8 @@ public class MerchantDocumentResource {
                         @QueryParam("page") @DefaultValue("1") int page,
                         @QueryParam("size") @DefaultValue("20") int size,
                         @QueryParam("search") String search) {
-                return merchantDocumentService.listTrashedMerchantDocuments(page, size, search)
+                FindAllMerchantDocumentsRequest request = new FindAllMerchantDocumentsRequest(search, page, size);
+                return merchantDocumentService.listTrashedMerchantDocuments(request)
                                 .map(res -> Response.ok(res).build());
         }
 

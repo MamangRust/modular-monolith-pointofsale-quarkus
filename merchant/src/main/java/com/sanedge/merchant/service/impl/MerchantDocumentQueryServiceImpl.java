@@ -1,7 +1,9 @@
 package com.sanedge.merchant.service.impl;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.function.Function;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
@@ -11,27 +13,20 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sanedge.common.config.RedisService;
-import com.sanedge.merchant.domain.requests.FindAllMerchantDocuments;
 import com.sanedge.common.domain.response.ApiResponse;
 import com.sanedge.common.domain.response.ApiResponsePagination;
 import com.sanedge.common.domain.response.PagedResult;
 import com.sanedge.common.domain.response.PaginationMeta;
+import com.sanedge.common.observability.TracingMetrics;
+import com.sanedge.merchant.domain.requests.FindAllMerchantDocuments;
 import com.sanedge.merchant.domain.response.MerchantDocumentResponse;
 import com.sanedge.merchant.domain.response.MerchantDocumentResponseDeleteAt;
 import com.sanedge.merchant.repository.MerchantDocumentQueryRepository;
 import com.sanedge.merchant.service.MerchantDocumentQueryService;
 
-import io.opentelemetry.api.OpenTelemetry;
-import io.opentelemetry.api.common.AttributeKey;
 import io.opentelemetry.api.common.Attributes;
-import io.opentelemetry.api.metrics.DoubleHistogram;
-import io.opentelemetry.api.metrics.LongCounter;
-import io.opentelemetry.api.metrics.Meter;
-import io.opentelemetry.api.trace.Span;
-import io.opentelemetry.api.trace.SpanKind;
-import io.opentelemetry.api.trace.StatusCode;
-import io.opentelemetry.api.trace.Tracer;
 import io.smallrye.mutiny.Uni;
+import io.quarkus.hibernate.reactive.panache.common.WithTransaction;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.NotFoundException;
@@ -43,31 +38,19 @@ public class MerchantDocumentQueryServiceImpl implements MerchantDocumentQuerySe
     private final MerchantDocumentQueryRepository merchantDocumentQueryRepository;
     private final RedisService redisService;
     private final ObjectMapper objectMapper;
-
-    private final Tracer tracer;
-    private final LongCounter requestsTotal;
-    private final DoubleHistogram requestDurationSeconds;
+    private final TracingMetrics tracingMetrics;
 
     private static final long LIST_CACHE_TTL_SECONDS = 300;
 
     @Inject
     public MerchantDocumentQueryServiceImpl(MerchantDocumentQueryRepository merchantDocumentQueryRepository,
-                    OpenTelemetry openTelemetry,
-                    RedisService redisService,
-                    ObjectMapper objectMapper) {
+            RedisService redisService,
+            ObjectMapper objectMapper,
+            TracingMetrics tracingMetrics) {
         this.merchantDocumentQueryRepository = merchantDocumentQueryRepository;
         this.redisService = redisService;
         this.objectMapper = objectMapper;
-        this.tracer = openTelemetry.getTracer("merchant-document-query-service", "1.0.0");
-        Meter meter = openTelemetry.getMeter("merchant-document-query-service");
-
-        this.requestsTotal = meter.counterBuilder("requests_total")
-                        .setDescription("Total number of requests")
-                        .build();
-        this.requestDurationSeconds = meter.histogramBuilder("request_duration_seconds")
-                        .setDescription("Request duration in seconds")
-                        .setUnit("s")
-                        .build();
+        this.tracingMetrics = tracingMetrics;
     }
 
     private String toJson(Object obj) {
@@ -98,187 +81,149 @@ public class MerchantDocumentQueryServiceImpl implements MerchantDocumentQuerySe
     }
 
     @Override
+    @WithTransaction
     public Uni<ApiResponsePagination<List<MerchantDocumentResponse>>> findAll(FindAllMerchantDocuments req) {
         String cacheKey = String.format("merchant_docs:all:%d:%d:%s", req.getPage(), req.getPageSize(),
-                        req.getSearch());
+                req.getSearch() != null ? req.getSearch() : "");
 
         return redisService.getReactive(cacheKey)
                 .chain(cachedJson -> {
                     if (cachedJson != null) {
                         logger.info("Cache HIT for key: {}", cacheKey);
                         ApiResponsePagination<List<MerchantDocumentResponse>> response = fromJson(cachedJson,
-                                        new TypeReference<ApiResponsePagination<List<MerchantDocumentResponse>>>() {
-                                        });
+                                new TypeReference<ApiResponsePagination<List<MerchantDocumentResponse>>>() {
+                                });
                         return Uni.createFrom().item(response);
                     }
 
                     logger.info("Cache MISS for key: {}. Fetching from DB.", cacheKey);
-                    long startTime = System.currentTimeMillis();
-                    Span span = tracer.spanBuilder("findAllMerchantDocuments")
-                                    .setSpanKind(SpanKind.SERVER)
-                                    .setAttribute("service.name", "merchant-document-query-service")
-                                    .setAttribute("operation", "find_all")
-                                    .startSpan();
+                    return runTraced("findAllMerchantDocuments", "find_all_merchant_documents", Attributes.empty(),
+                            () -> merchantDocumentQueryRepository.findDocuments(req)
+                                        .chain(pagedResult -> {
+                                            ApiResponsePagination<List<MerchantDocumentResponse>> response = buildPaginatedResponse(
+                                                    pagedResult, req, "Merchant documents retrieved successfully",
+                                                    MerchantDocumentResponse::from);
 
-                    int page = req.getPage() > 0 ? req.getPage() - 1 : 0;
-                    int size = req.getPageSize() > 0 ? req.getPageSize() : 10;
-                    String search = (req.getSearch() != null && !req.getSearch().isEmpty()) ? req.getSearch() : null;
-
-                    return merchantDocumentQueryRepository.findDocuments(search, page, size)
-                            .chain(pagedResult -> {
-                                span.setAttribute("doc.count", pagedResult.getTotalRecords());
-                                span.setAttribute("doc.page", req.getPage());
-                                span.setAttribute("doc.size", req.getPageSize());
-
-                                ApiResponsePagination<List<MerchantDocumentResponse>> response = buildPaginatedResponse(
-                                                pagedResult, req, "Merchant documents retrieved successfully",
-                                                MerchantDocumentResponse::from);
-
-                                return redisService.setWithExpirationReactive(cacheKey, toJson(response), LIST_CACHE_TTL_SECONDS)
-                                        .map(v -> {
-                                            logger.info("Cached response for key: {}", cacheKey);
-                                            span.setStatus(StatusCode.OK);
-
-                                            requestsTotal.add(1, Attributes.of(
-                                                            AttributeKey.stringKey("operation"), "find_all",
-                                                            AttributeKey.stringKey("status"), "success"));
-                                            return response;
-                                        });
-                            })
-                            .onFailure().invoke(e -> {
-                                logger.error("Error finding all merchant documents", e);
-                                span.recordException(e);
-                                span.setStatus(StatusCode.ERROR, e.getMessage());
-
-                                requestsTotal.add(1, Attributes.of(
-                                                AttributeKey.stringKey("operation"), "find_all",
-                                                AttributeKey.stringKey("status"), "failed",
-                                                AttributeKey.stringKey("error_type"), e.getClass().getSimpleName()));
-                            })
-                            .eventually(() -> {
-                                span.end();
-                                double duration = (System.currentTimeMillis() - startTime) / 1000.0;
-                                requestDurationSeconds.record(duration, Attributes.of(
-                                                AttributeKey.stringKey("operation"), "find_all"));
-                            });
+                                            return redisService
+                                                    .setWithExpirationReactive(cacheKey, toJson(response),
+                                                            LIST_CACHE_TTL_SECONDS)
+                                                    .map(v -> {
+                                                        logger.info("Cached response for key: {}", cacheKey);
+                                                        logger.info("Successfully retrieved {} merchant documents",
+                                                                pagedResult.getTotalRecords());
+                                                        return response;
+                                                    });
+                                        })
+                                        .onFailure().recoverWithItem(e -> {
+                                            logger.error("Failed to fetch merchant documents: {}", e.getMessage(), e);
+                                            return new ApiResponsePagination<>("error",
+                                                    "Failed to fetch merchant documents", Collections.emptyList(),
+                                                    null);
+                                        })
+                            );
                 });
     }
 
     @Override
-    public Uni<ApiResponsePagination<List<MerchantDocumentResponseDeleteAt>>> findAllActive(FindAllMerchantDocuments req) {
+    @WithTransaction
+    public Uni<ApiResponsePagination<List<MerchantDocumentResponseDeleteAt>>> findAllActive(
+            FindAllMerchantDocuments req) {
         String cacheKey = String.format("merchant_docs:active:%d:%d:%s", req.getPage(), req.getPageSize(),
-                        req.getSearch());
+                req.getSearch() != null ? req.getSearch() : "");
 
         return redisService.getReactive(cacheKey)
                 .chain(cachedJson -> {
                     if (cachedJson != null) {
                         logger.info("Cache HIT for key: {}", cacheKey);
                         ApiResponsePagination<List<MerchantDocumentResponseDeleteAt>> response = fromJson(cachedJson,
-                                        new TypeReference<ApiResponsePagination<List<MerchantDocumentResponseDeleteAt>>>() {
-                                        });
+                                new TypeReference<ApiResponsePagination<List<MerchantDocumentResponseDeleteAt>>>() {
+                                });
                         return Uni.createFrom().item(response);
                     }
 
                     logger.info("Cache MISS for key: {}. Fetching from DB.", cacheKey);
-                    long startTime = System.currentTimeMillis();
-                    Span span = tracer.spanBuilder("findActiveMerchantDocuments")
-                                    .setSpanKind(SpanKind.SERVER)
-                                    .setAttribute("service.name", "merchant-document-query-service")
-                                    .setAttribute("operation", "find_active")
-                                    .startSpan();
+                    return runTraced("findActiveMerchantDocuments", "find_active_merchant_documents",
+                            Attributes.empty(),
+                            () -> merchantDocumentQueryRepository.findActiveDocuments(req)
+                                        .chain(pagedResult -> {
+                                            ApiResponsePagination<List<MerchantDocumentResponseDeleteAt>> response = buildPaginatedResponse(
+                                                    pagedResult, req,
+                                                    "Active merchant documents retrieved successfully",
+                                                    MerchantDocumentResponseDeleteAt::from);
 
-                    int page = req.getPage() > 0 ? req.getPage() - 1 : 0;
-                    int size = req.getPageSize() > 0 ? req.getPageSize() : 10;
-                    String search = (req.getSearch() != null && !req.getSearch().isEmpty()) ? req.getSearch() : null;
-
-                    return merchantDocumentQueryRepository.findActiveDocuments(search, page, size)
-                            .chain(pagedResult -> {
-                                span.setAttribute("doc.count", pagedResult.getTotalRecords());
-                                ApiResponsePagination<List<MerchantDocumentResponseDeleteAt>> response = buildPaginatedResponse(
-                                                pagedResult, req, "Active merchant documents retrieved successfully",
-                                                MerchantDocumentResponseDeleteAt::from);
-
-                                return redisService.setWithExpirationReactive(cacheKey, toJson(response), LIST_CACHE_TTL_SECONDS)
-                                        .map(v -> {
-                                            span.setStatus(StatusCode.OK);
-                                            requestsTotal.add(1, Attributes.of(
-                                                            AttributeKey.stringKey("operation"), "find_active",
-                                                            AttributeKey.stringKey("status"), "success"));
-                                            return response;
-                                        });
-                            })
-                            .onFailure().invoke(e -> {
-                                logger.error("Error finding active merchant documents", e);
-                                span.recordException(e);
-                                span.setStatus(StatusCode.ERROR, e.getMessage());
-                            })
-                            .eventually(() -> {
-                                span.end();
-                                double duration = (System.currentTimeMillis() - startTime) / 1000.0;
-                                requestDurationSeconds.record(duration, Attributes.of(
-                                                AttributeKey.stringKey("operation"), "find_active"));
-                            });
+                                            return redisService
+                                                    .setWithExpirationReactive(cacheKey, toJson(response),
+                                                            LIST_CACHE_TTL_SECONDS)
+                                                    .map(v -> {
+                                                        logger.info("Cached response for key: {}", cacheKey);
+                                                        logger.info(
+                                                                "Successfully retrieved {} active merchant documents",
+                                                                pagedResult.getTotalRecords());
+                                                        return response;
+                                                    });
+                                        })
+                                        .onFailure().recoverWithItem(e -> {
+                                            logger.error("Failed to fetch active merchant documents: {}",
+                                                    e.getMessage(), e);
+                                            return new ApiResponsePagination<>("error",
+                                                    "Failed to fetch active merchant documents",
+                                                    Collections.emptyList(), null);
+                                        })
+                            );
                 });
     }
 
     @Override
-    public Uni<ApiResponsePagination<List<MerchantDocumentResponseDeleteAt>>> findAllTrashed(FindAllMerchantDocuments req) {
+    @WithTransaction
+    public Uni<ApiResponsePagination<List<MerchantDocumentResponseDeleteAt>>> findAllTrashed(
+            FindAllMerchantDocuments req) {
         String cacheKey = String.format("merchant_docs:trashed:%d:%d:%s", req.getPage(), req.getPageSize(),
-                        req.getSearch());
+                req.getSearch() != null ? req.getSearch() : "");
 
         return redisService.getReactive(cacheKey)
                 .chain(cachedJson -> {
                     if (cachedJson != null) {
                         logger.info("Cache HIT for key: {}", cacheKey);
                         ApiResponsePagination<List<MerchantDocumentResponseDeleteAt>> response = fromJson(cachedJson,
-                                        new TypeReference<ApiResponsePagination<List<MerchantDocumentResponseDeleteAt>>>() {
-                                        });
+                                new TypeReference<ApiResponsePagination<List<MerchantDocumentResponseDeleteAt>>>() {
+                                });
                         return Uni.createFrom().item(response);
                     }
 
                     logger.info("Cache MISS for key: {}. Fetching from DB.", cacheKey);
-                    long startTime = System.currentTimeMillis();
-                    Span span = tracer.spanBuilder("findTrashedMerchantDocuments")
-                                    .setSpanKind(SpanKind.SERVER)
-                                    .setAttribute("service.name", "merchant-document-query-service")
-                                    .setAttribute("operation", "find_trashed")
-                                    .startSpan();
+                    return runTraced("findTrashedMerchantDocuments", "find_trashed_merchant_documents",
+                            Attributes.empty(),
+                            () -> merchantDocumentQueryRepository.findTrashedDocuments(req)
+                                        .chain(pagedResult -> {
+                                            ApiResponsePagination<List<MerchantDocumentResponseDeleteAt>> response = buildPaginatedResponse(
+                                                    pagedResult, req,
+                                                    "Trashed merchant documents retrieved successfully",
+                                                    MerchantDocumentResponseDeleteAt::from);
 
-                    int page = req.getPage() > 0 ? req.getPage() - 1 : 0;
-                    int size = req.getPageSize() > 0 ? req.getPageSize() : 10;
-                    String search = (req.getSearch() != null && !req.getSearch().isEmpty()) ? req.getSearch() : null;
-
-                    return merchantDocumentQueryRepository.findTrashedDocuments(search, page, size)
-                            .chain(pagedResult -> {
-                                span.setAttribute("doc.count", pagedResult.getTotalRecords());
-                                ApiResponsePagination<List<MerchantDocumentResponseDeleteAt>> response = buildPaginatedResponse(
-                                                pagedResult, req, "Trashed merchant documents retrieved successfully",
-                                                MerchantDocumentResponseDeleteAt::from);
-
-                                return redisService.setWithExpirationReactive(cacheKey, toJson(response), LIST_CACHE_TTL_SECONDS)
-                                        .map(v -> {
-                                            span.setStatus(StatusCode.OK);
-                                            requestsTotal.add(1, Attributes.of(
-                                                            AttributeKey.stringKey("operation"), "find_trashed",
-                                                            AttributeKey.stringKey("status"), "success"));
-                                            return response;
-                                        });
-                            })
-                            .onFailure().invoke(e -> {
-                                logger.error("Error finding trashed merchant documents", e);
-                                span.recordException(e);
-                                span.setStatus(StatusCode.ERROR, e.getMessage());
-                            })
-                            .eventually(() -> {
-                                span.end();
-                                double duration = (System.currentTimeMillis() - startTime) / 1000.0;
-                                requestDurationSeconds.record(duration, Attributes.of(
-                                                AttributeKey.stringKey("operation"), "find_trashed"));
-                            });
+                                            return redisService
+                                                    .setWithExpirationReactive(cacheKey, toJson(response),
+                                                            LIST_CACHE_TTL_SECONDS)
+                                                    .map(v -> {
+                                                        logger.info("Cached response for key: {}", cacheKey);
+                                                        logger.info(
+                                                                "Successfully retrieved {} trashed merchant documents",
+                                                                pagedResult.getTotalRecords());
+                                                        return response;
+                                                    });
+                                        })
+                                        .onFailure().recoverWithItem(e -> {
+                                            logger.error("Failed to fetch trashed merchant documents: {}",
+                                                    e.getMessage(), e);
+                                            return new ApiResponsePagination<>("error",
+                                                    "Failed to fetch trashed merchant documents",
+                                                    Collections.emptyList(), null);
+                                        })
+                            );
                 });
     }
 
     @Override
+    @WithTransaction
     public Uni<ApiResponse<MerchantDocumentResponse>> findById(Long id) {
         String cacheKey = "merchant_doc:id:" + id;
 
@@ -287,59 +232,52 @@ public class MerchantDocumentQueryServiceImpl implements MerchantDocumentQuerySe
                     if (cachedJson != null) {
                         logger.info("Cache HIT for key: {}", cacheKey);
                         MerchantDocumentResponse cachedDoc = fromJson(cachedJson, MerchantDocumentResponse.class);
-                        return Uni.createFrom().item(ApiResponse.success("Merchant document retrieved successfully", cachedDoc));
+                        return Uni.createFrom()
+                                .item(ApiResponse.success("Merchant document retrieved successfully", cachedDoc));
                     }
 
                     logger.info("Cache MISS for key: {}. Fetching from DB.", cacheKey);
-                    long startTime = System.currentTimeMillis();
-                    Span span = tracer.spanBuilder("findMerchantDocumentById")
-                                    .setSpanKind(SpanKind.SERVER)
-                                    .setAttribute("service.name", "merchant-document-query-service")
-                                    .setAttribute("operation", "find_by_id")
-                                    .setAttribute("doc.id", id.toString())
-                                    .startSpan();
+                    Attributes attrs = Attributes.builder()
+                            .put("doc.id", id.toString())
+                            .build();
 
-                    return merchantDocumentQueryRepository.findDocumentById(id)
-                            .chain(doc -> {
-                                if (doc == null) {
-                                    span.setStatus(StatusCode.ERROR, "Merchant document not found");
-                                    throw new NotFoundException("Merchant document not found with id: " + id);
-                                }
+                    return runTraced("findMerchantDocumentById", "find_merchant_document_by_id", attrs,
+                            () -> merchantDocumentQueryRepository.findDocumentById(id)
+                                    .chain(doc -> {
+                                        if (doc == null) {
+                                            logger.warn("Merchant document not found with id: {}", id);
+                                            throw new NotFoundException("Merchant document not found with id: " + id);
+                                        }
 
-                                MerchantDocumentResponse response = MerchantDocumentResponse.from(doc);
+                                        MerchantDocumentResponse response = MerchantDocumentResponse.from(doc);
 
-                                return redisService.setReactive(cacheKey, toJson(response))
-                                        .map(v -> {
-                                            span.setStatus(StatusCode.OK);
-                                            requestsTotal.add(1, Attributes.of(
-                                                            AttributeKey.stringKey("operation"), "find_by_id",
-                                                            AttributeKey.stringKey("status"), "success"));
-                                            return ApiResponse.success("Merchant document retrieved successfully", response);
-                                        });
-                            })
-                            .onFailure().invoke(e -> {
-                                logger.error("Error finding merchant document by id: {}", id, e);
-                                span.recordException(e);
-                                span.setStatus(StatusCode.ERROR, e.getMessage());
-                            })
-                            .eventually(() -> {
-                                span.end();
-                                double duration = (System.currentTimeMillis() - startTime) / 1000.0;
-                                requestDurationSeconds.record(duration, Attributes.of(
-                                                AttributeKey.stringKey("operation"), "find_by_id"));
-                            });
+                                        return redisService.setReactive(cacheKey, toJson(response))
+                                                .map(v -> {
+                                                    logger.info("Cached merchant document for key: {}", cacheKey);
+                                                    logger.info("Successfully found merchant document with id: {}", id);
+                                                    return ApiResponse.success(
+                                                            "Merchant document retrieved successfully", response);
+                                                });
+                                    })
+                                    .onFailure().recoverWithItem(e -> {
+                                        logger.error("Failed to fetch merchant document by id={}: {}", id,
+                                                e.getMessage(), e);
+                                        return new ApiResponse<>("error",
+                                                "Failed to fetch merchant document: " + e.getMessage(),
+                                                (MerchantDocumentResponse) null);
+                                    }));
                 });
     }
 
     private <T, R> ApiResponsePagination<List<R>> buildPaginatedResponse(
-                    PagedResult<T> pagedResult,
-                    FindAllMerchantDocuments request,
-                    String successMessage,
-                    Function<T, R> mapper) {
+            PagedResult<T> pagedResult,
+            FindAllMerchantDocuments request,
+            String successMessage,
+            Function<T, R> mapper) {
 
         List<R> data = pagedResult.getData().stream()
-                        .map(mapper)
-                        .collect(Collectors.toList());
+                .map(mapper)
+                .collect(Collectors.toList());
 
         int totalRecords = pagedResult.getTotalRecords();
         int size = request.getPageSize() > 0 ? request.getPageSize() : 1;
@@ -348,5 +286,10 @@ public class MerchantDocumentQueryServiceImpl implements MerchantDocumentQuerySe
         PaginationMeta pagination = new PaginationMeta(request.getPage(), size, totalPages, totalRecords);
 
         return new ApiResponsePagination<>("success", successMessage, data, pagination);
+    }
+
+    private <T> Uni<T> runTraced(String operationName, String method, Attributes attributes,
+            Supplier<Uni<T>> supplier) {
+        return tracingMetrics.traceAndMeasure(operationName, method, attributes, supplier);
     }
 }

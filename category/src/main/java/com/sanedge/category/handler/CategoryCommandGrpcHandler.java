@@ -5,7 +5,7 @@ import com.sanedge.category.domain.requests.CreateCategoryRequest;
 import com.sanedge.category.domain.requests.UpdateCategoryRequest;
 import com.sanedge.category.service.CategoryCommandService;
 
-import io.grpc.Status;
+import com.sanedge.common.grpc.GrpcErrorMapper;
 import io.quarkus.grpc.GrpcService;
 import io.smallrye.mutiny.Uni;
 import jakarta.inject.Inject;
@@ -40,7 +40,7 @@ public class CategoryCommandGrpcHandler extends MutinyCategoryCommandServiceGrpc
                     }
                     return builder.build();
                 })
-                .onFailure().transform(e -> Status.INTERNAL.withDescription(e.getMessage()).asRuntimeException());
+                .onFailure().transform(GrpcErrorMapper::toStatusRuntimeException);
     }
 
     @Override
@@ -60,7 +60,7 @@ public class CategoryCommandGrpcHandler extends MutinyCategoryCommandServiceGrpc
                     }
                     return builder.build();
                 })
-                .onFailure().transform(e -> Status.INTERNAL.withDescription(e.getMessage()).asRuntimeException());
+                .onFailure().transform(GrpcErrorMapper::toStatusRuntimeException);
     }
 
     @Override
@@ -75,7 +75,7 @@ public class CategoryCommandGrpcHandler extends MutinyCategoryCommandServiceGrpc
                     }
                     return builder.build();
                 })
-                .onFailure().transform(e -> Status.INTERNAL.withDescription(e.getMessage()).asRuntimeException());
+                .onFailure().transform(GrpcErrorMapper::toStatusRuntimeException);
     }
 
     @Override
@@ -90,7 +90,7 @@ public class CategoryCommandGrpcHandler extends MutinyCategoryCommandServiceGrpc
                     }
                     return builder.build();
                 })
-                .onFailure().transform(e -> Status.INTERNAL.withDescription(e.getMessage()).asRuntimeException());
+                .onFailure().transform(GrpcErrorMapper::toStatusRuntimeException);
     }
 
     @Override
@@ -100,7 +100,7 @@ public class CategoryCommandGrpcHandler extends MutinyCategoryCommandServiceGrpc
                         .setStatus(apiResp.status())
                         .setMessage(apiResp.message())
                         .build())
-                .onFailure().transform(e -> Status.INTERNAL.withDescription(e.getMessage()).asRuntimeException());
+                .onFailure().transform(GrpcErrorMapper::toStatusRuntimeException);
     }
 
     @Override
@@ -110,7 +110,7 @@ public class CategoryCommandGrpcHandler extends MutinyCategoryCommandServiceGrpc
                         .setStatus(apiResp.status())
                         .setMessage(apiResp.message())
                         .build())
-                .onFailure().transform(e -> Status.INTERNAL.withDescription(e.getMessage()).asRuntimeException());
+                .onFailure().transform(GrpcErrorMapper::toStatusRuntimeException);
     }
 
     @Override
@@ -120,7 +120,7 @@ public class CategoryCommandGrpcHandler extends MutinyCategoryCommandServiceGrpc
                         .setStatus(apiResp.status())
                         .setMessage(apiResp.message())
                         .build())
-                .onFailure().transform(e -> Status.INTERNAL.withDescription(e.getMessage()).asRuntimeException());
+                .onFailure().transform(GrpcErrorMapper::toStatusRuntimeException);
     }
 
     private pb.category.Category.CategoryResponse toProto(com.sanedge.category.domain.response.CategoryResponse r) {

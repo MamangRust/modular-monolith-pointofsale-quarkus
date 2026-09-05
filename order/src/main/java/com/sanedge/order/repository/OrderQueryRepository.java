@@ -1,6 +1,7 @@
 package com.sanedge.order.repository;
 
 import com.sanedge.order.domain.requests.FindAllOrderByMerchantRequest;
+import com.sanedge.order.domain.requests.FindAllOrderRequest;
 import com.sanedge.common.domain.response.PagedResult;
 import com.sanedge.order.entity.Order;
 
@@ -11,12 +12,13 @@ import jakarta.enterprise.context.ApplicationScoped;
 @ApplicationScoped
 public class OrderQueryRepository implements PanacheRepository<Order> {
 
-    public Uni<PagedResult<Order>> findOrders(String keyword, int page, int size) {
-        int pageIndex = page > 0 ? page - 1 : 0;
-        String searchKeyword = (keyword != null && !keyword.trim().isEmpty()) ? keyword.trim() : null;
+    public Uni<PagedResult<Order>> findOrders(FindAllOrderRequest req) {
+        int pageIndex = req.getPage() != null && req.getPage() > 0 ? req.getPage() - 1 : 0;
+        int size = req.getPageSize() != null && req.getPageSize() > 0 ? req.getPageSize() : 10;
+        String searchKeyword = (req.getSearch() != null && !req.getSearch().trim().isEmpty()) ? req.getSearch().trim() : null;
 
         var query = """
-                    ?1 IS NULL
+                    CAST(?1 AS string) IS NULL
                     OR CAST(id AS string) LIKE CONCAT('%', ?1, '%')
                     OR CAST(cashierId AS string) LIKE CONCAT('%', ?1, '%')
                     ORDER BY createdAt ASC
@@ -38,7 +40,7 @@ public class OrderQueryRepository implements PanacheRepository<Order> {
 
         var query = """
                     merchantId = ?1
-                    AND (?2 IS NULL
+                    AND (CAST(?2 AS string) IS NULL
                         OR CAST(id AS string) LIKE CONCAT('%', ?2, '%')
                         OR CAST(cashierId AS string) LIKE CONCAT('%', ?2, '%'))
                     ORDER BY createdAt ASC
@@ -52,13 +54,14 @@ public class OrderQueryRepository implements PanacheRepository<Order> {
                 .map(tuple -> new PagedResult<>(tuple.getItem1(), tuple.getItem2().intValue()));
     }
 
-    public Uni<PagedResult<Order>> findActiveOrders(String keyword, int page, int size) {
-        int pageIndex = page > 0 ? page - 1 : 0;
-        String searchKeyword = (keyword != null && !keyword.trim().isEmpty()) ? keyword.trim() : null;
+    public Uni<PagedResult<Order>> findActiveOrders(FindAllOrderRequest req) {
+        int pageIndex = req.getPage() != null && req.getPage() > 0 ? req.getPage() - 1 : 0;
+        int size = req.getPageSize() != null && req.getPageSize() > 0 ? req.getPageSize() : 10;
+        String searchKeyword = (req.getSearch() != null && !req.getSearch().trim().isEmpty()) ? req.getSearch().trim() : null;
 
         var query = """
                     deletedAt IS NULL
-                    AND (?1 IS NULL
+                    AND (CAST(?1 AS string) IS NULL
                         OR CAST(id AS string) LIKE CONCAT('%', ?1, '%')
                         OR CAST(cashierId AS string) LIKE CONCAT('%', ?1, '%'))
                     ORDER BY createdAt ASC
@@ -76,13 +79,14 @@ public class OrderQueryRepository implements PanacheRepository<Order> {
         return find("id = ?1 AND deletedAt IS NULL", orderId).firstResult();
     }
 
-    public Uni<PagedResult<Order>> findTrashedOrders(String keyword, int page, int size) {
-        int pageIndex = page > 0 ? page - 1 : 0;
-        String searchKeyword = (keyword != null && !keyword.trim().isEmpty()) ? keyword.trim() : null;
+    public Uni<PagedResult<Order>> findTrashedOrders(FindAllOrderRequest req) {
+        int pageIndex = req.getPage() != null && req.getPage() > 0 ? req.getPage() - 1 : 0;
+        int size = req.getPageSize() != null && req.getPageSize() > 0 ? req.getPageSize() : 10;
+        String searchKeyword = (req.getSearch() != null && !req.getSearch().trim().isEmpty()) ? req.getSearch().trim() : null;
 
         var query = """
                     deletedAt IS NOT NULL
-                    AND (?1 IS NULL
+                    AND (CAST(?1 AS string) IS NULL
                         OR CAST(id AS string) LIKE CONCAT('%', ?1, '%')
                         OR CAST(cashierId AS string) LIKE CONCAT('%', ?1, '%'))
                     ORDER BY deletedAt DESC

@@ -10,8 +10,11 @@ import jakarta.enterprise.context.ApplicationScoped;
 @ApplicationScoped
 public class UserRoleRepository implements PanacheRepositoryBase<UserRole, UserRoleId> {
 
+    @jakarta.inject.Inject
+    RoleRepository roleRepository;
+
     @WithTransaction
-    public Uni<UserRole> assignRole(Long userId, Long roleId, RoleRepository roleRepository) {
+    public Uni<UserRole> assignRole(Long userId, Long roleId) {
         return roleRepository.findById(roleId)
                 .chain(role -> {
                     if (role == null) {

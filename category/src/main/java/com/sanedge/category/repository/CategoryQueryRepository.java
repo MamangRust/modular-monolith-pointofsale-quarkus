@@ -19,7 +19,7 @@ public class CategoryQueryRepository implements PanacheRepository<Category> {
         String keyword = (req.getSearch() != null && !req.getSearch().trim().isEmpty()) ? req.getSearch().trim() : null;
 
         var query = """
-                    ?1 IS NULL OR LOWER(name) LIKE LOWER(CONCAT('%', ?1, '%'))
+                    CAST(?1 AS string) IS NULL OR LOWER(name) LIKE LOWER(CONCAT('%', ?1, '%'))
                     ORDER BY createdAt ASC
                 """;
 
@@ -38,7 +38,7 @@ public class CategoryQueryRepository implements PanacheRepository<Category> {
 
         var query = """
                     deletedAt IS NULL
-                    AND (?1 IS NULL OR LOWER(name) LIKE LOWER(CONCAT('%', ?1, '%')))
+                    AND (CAST(?1 AS string) IS NULL OR LOWER(name) LIKE LOWER(CONCAT('%', ?1, '%')))
                     ORDER BY createdAt ASC
                 """;
 
@@ -57,7 +57,7 @@ public class CategoryQueryRepository implements PanacheRepository<Category> {
 
         var query = """
                     deletedAt IS NOT NULL
-                    AND (?1 IS NULL OR LOWER(name) LIKE LOWER(CONCAT('%', ?1, '%')))
+                    AND (CAST(?1 AS string) IS NULL OR LOWER(name) LIKE LOWER(CONCAT('%', ?1, '%')))
                     ORDER BY deletedAt DESC
                 """;
 

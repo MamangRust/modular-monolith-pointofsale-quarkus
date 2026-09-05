@@ -3,6 +3,8 @@ package com.sanedge.category.repository.statsbymerchant;
 import java.util.ArrayList;
 import java.util.List;
 
+import com.sanedge.category.domain.requests.FindCategoryMonthTotalPriceByMerchant;
+import com.sanedge.category.domain.requests.FindCategoryYearTotalPriceByMerchant;
 import com.sanedge.category.entity.Category;
 import com.sanedge.category.entity.CategoryMonthTotalPrice;
 import com.sanedge.category.entity.CategoryYearTotalPrice;
@@ -15,7 +17,7 @@ import jakarta.enterprise.context.ApplicationScoped;
 @ApplicationScoped
 public class CategoryTotalPriceByMerchantRepository implements PanacheRepository<Category> {
 
-    public Uni<List<CategoryMonthTotalPrice>> findMonthlyTotalPriceByMerchant(Long merchantId, Integer startYear, Integer startMonth, Integer endYear, Integer endMonth) {
+    public Uni<List<CategoryMonthTotalPrice>> findMonthlyTotalPriceByMerchant(FindCategoryMonthTotalPriceByMerchant req) {
         String sql = """
             WITH date_range AS (
                 SELECT
@@ -40,9 +42,9 @@ public class CategoryTotalPriceByMerchantRepository implements PanacheRepository
                 GROUP BY CAST(EXTRACT(YEAR FROM o.created_at) AS VARCHAR), CAST(EXTRACT(MONTH FROM o.created_at) AS INTEGER)
             ),
             all_months AS (
-                SELECT CAST(:startYear AS VARCHAR) AS year, CAST(:startMonth AS INTEGER) AS month, TO_CHAR(make_date(:startYear, :startMonth, 1), 'FMMonth') AS month_name
+                SELECT CAST(CAST(:startYear AS INTEGER) AS VARCHAR) AS year, CAST(:startMonth AS INTEGER) AS month, TO_CHAR(make_date(:startYear, :startMonth, 1), 'FMMonth') AS month_name
                 UNION
-                SELECT CAST(:endYear AS VARCHAR) AS year, CAST(:endMonth AS INTEGER) AS month, TO_CHAR(make_date(:endYear, :endMonth, 1), 'FMMonth') AS month_name
+                SELECT CAST(CAST(:endYear AS INTEGER) AS VARCHAR) AS year, CAST(:endMonth AS INTEGER) AS month, TO_CHAR(make_date(:endYear, :endMonth, 1), 'FMMonth') AS month_name
             )
             SELECT
                 am.year,
@@ -55,11 +57,11 @@ public class CategoryTotalPriceByMerchantRepository implements PanacheRepository
 
         return Panache.getSession()
                 .chain(session -> session.createNativeQuery(sql)
-                        .setParameter("merchantId", merchantId)
-                        .setParameter("startYear", startYear)
-                        .setParameter("startMonth", startMonth)
-                        .setParameter("endYear", endYear)
-                        .setParameter("endMonth", endMonth)
+                        .setParameter("merchantId", req.getMerchantId())
+                        .setParameter("startYear", req.getStartYear())
+                        .setParameter("startMonth", req.getStartMonth())
+                        .setParameter("endYear", req.getEndYear())
+                        .setParameter("endMonth", req.getEndMonth())
                         .getResultList())
                 .map(rawList -> {
                     List<CategoryMonthTotalPrice> list = new ArrayList<>();
@@ -75,7 +77,7 @@ public class CategoryTotalPriceByMerchantRepository implements PanacheRepository
                 });
     }
 
-    public Uni<List<CategoryYearTotalPrice>> findYearlyTotalPriceByMerchant(Long merchantId, Integer year, Integer yearMinusOne) {
+    public Uni<List<CategoryYearTotalPrice>> findYearlyTotalPriceByMerchant(FindCategoryYearTotalPriceByMerchant req) {
         String sql = """
             WITH yearly_data AS (
                 SELECT
@@ -108,9 +110,9 @@ public class CategoryTotalPriceByMerchantRepository implements PanacheRepository
 
         return Panache.getSession()
                 .chain(session -> session.createNativeQuery(sql)
-                        .setParameter("merchantId", merchantId)
-                        .setParameter("year", year)
-                        .setParameter("yearMinusOne", yearMinusOne)
+                        .setParameter("merchantId", req.getMerchantId())
+                        .setParameter("year", req.getYear())
+                        .setParameter("yearMinusOne", req.getYearMinusOne())
                         .getResultList())
                 .map(rawList -> {
                     List<CategoryYearTotalPrice> list = new ArrayList<>();

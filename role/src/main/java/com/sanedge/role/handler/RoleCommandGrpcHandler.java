@@ -6,7 +6,7 @@ import com.sanedge.role.domain.response.RoleResponseDeleteAt;
 import com.sanedge.role.domain.response.UserRoleResponse;
 import com.sanedge.role.service.RoleCommandService;
 
-import io.grpc.Status;
+import com.sanedge.common.grpc.GrpcErrorMapper;
 import io.quarkus.grpc.GrpcService;
 import io.smallrye.mutiny.Uni;
 import jakarta.inject.Inject;
@@ -42,7 +42,7 @@ public class RoleCommandGrpcHandler extends MutinyRoleCommandServiceGrpc.RoleCom
                     }
                     return builder.build();
                 })
-                .onFailure().transform(e -> Status.INTERNAL.withDescription(e.getMessage()).asRuntimeException());
+                .onFailure().transform(GrpcErrorMapper::toStatusRuntimeException);
     }
 
     @Override
@@ -61,7 +61,7 @@ public class RoleCommandGrpcHandler extends MutinyRoleCommandServiceGrpc.RoleCom
                     }
                     return builder.build();
                 })
-                .onFailure().transform(e -> Status.INTERNAL.withDescription(e.getMessage()).asRuntimeException());
+                .onFailure().transform(GrpcErrorMapper::toStatusRuntimeException);
     }
 
     @Override
@@ -76,7 +76,7 @@ public class RoleCommandGrpcHandler extends MutinyRoleCommandServiceGrpc.RoleCom
                     }
                     return builder.build();
                 })
-                .onFailure().transform(e -> Status.INTERNAL.withDescription(e.getMessage()).asRuntimeException());
+                .onFailure().transform(GrpcErrorMapper::toStatusRuntimeException);
     }
 
     @Override
@@ -91,7 +91,7 @@ public class RoleCommandGrpcHandler extends MutinyRoleCommandServiceGrpc.RoleCom
                     }
                     return builder.build();
                 })
-                .onFailure().transform(e -> Status.INTERNAL.withDescription(e.getMessage()).asRuntimeException());
+                .onFailure().transform(GrpcErrorMapper::toStatusRuntimeException);
     }
 
     @Override
@@ -101,7 +101,7 @@ public class RoleCommandGrpcHandler extends MutinyRoleCommandServiceGrpc.RoleCom
                         .setStatus(apiResp.status())
                         .setMessage(apiResp.message())
                         .build())
-                .onFailure().transform(e -> Status.INTERNAL.withDescription(e.getMessage()).asRuntimeException());
+                .onFailure().transform(GrpcErrorMapper::toStatusRuntimeException);
     }
 
     @Override
@@ -111,7 +111,7 @@ public class RoleCommandGrpcHandler extends MutinyRoleCommandServiceGrpc.RoleCom
                         .setStatus(apiResp.status())
                         .setMessage(apiResp.message())
                         .build())
-                .onFailure().transform(e -> Status.INTERNAL.withDescription(e.getMessage()).asRuntimeException());
+                .onFailure().transform(GrpcErrorMapper::toStatusRuntimeException);
     }
 
     @Override
@@ -121,7 +121,7 @@ public class RoleCommandGrpcHandler extends MutinyRoleCommandServiceGrpc.RoleCom
                         .setStatus(apiResp.status())
                         .setMessage(apiResp.message())
                         .build())
-                .onFailure().transform(e -> Status.INTERNAL.withDescription(e.getMessage()).asRuntimeException());
+                .onFailure().transform(GrpcErrorMapper::toStatusRuntimeException);
     }
 
     private pb.role.Role.RoleResponse toProto(RoleResponse r) {
@@ -181,14 +181,14 @@ public class RoleCommandGrpcHandler extends MutinyRoleCommandServiceGrpc.RoleCom
                     }
                     return builder.build();
                 })
-                .onFailure().transform(e -> Status.INTERNAL.withDescription(e.getMessage()).asRuntimeException());
+                .onFailure().transform(GrpcErrorMapper::toStatusRuntimeException);
     }
 
     @Override
     public Uni<Empty> removeRoleFromUser(pb.role.RoleCommand.RemoveRoleFromUserRequest request) {
         return roleCommandService.removeRoleFromUser((long) request.getUserId(), (long) request.getRoleId())
                 .map(apiResp -> Empty.getDefaultInstance())
-                .onFailure().transform(e -> Status.INTERNAL.withDescription(e.getMessage()).asRuntimeException());
+                .onFailure().transform(GrpcErrorMapper::toStatusRuntimeException);
     }
 
     private pb.role.RoleCommand.UserRoleResponse toProto(UserRoleResponse ur) {

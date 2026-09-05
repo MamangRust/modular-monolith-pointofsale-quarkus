@@ -3,6 +3,7 @@ package com.sanedge.category.service.impl;
 import java.util.Collections;
 import java.util.List;
 import java.util.function.Function;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
@@ -11,28 +12,21 @@ import org.slf4j.LoggerFactory;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.sanedge.common.config.RedisService;
 import com.sanedge.category.domain.requests.FindAllCategory;
-import com.sanedge.common.domain.response.ApiResponse;
-import com.sanedge.common.domain.response.ApiResponsePagination;
-import com.sanedge.common.domain.response.PagedResult;
-import com.sanedge.common.domain.response.PaginationMeta;
 import com.sanedge.category.domain.response.CategoryResponse;
 import com.sanedge.category.domain.response.CategoryResponseDeleteAt;
 import com.sanedge.category.repository.CategoryQueryRepository;
 import com.sanedge.category.service.CategoryQueryService;
+import com.sanedge.common.config.RedisService;
+import com.sanedge.common.domain.response.ApiResponse;
+import com.sanedge.common.domain.response.ApiResponsePagination;
+import com.sanedge.common.domain.response.PagedResult;
+import com.sanedge.common.domain.response.PaginationMeta;
+import com.sanedge.common.observability.TracingMetrics;
 
-import io.opentelemetry.api.OpenTelemetry;
-import io.opentelemetry.api.common.AttributeKey;
 import io.opentelemetry.api.common.Attributes;
-import io.opentelemetry.api.metrics.DoubleHistogram;
-import io.opentelemetry.api.metrics.LongCounter;
-import io.opentelemetry.api.metrics.Meter;
-import io.opentelemetry.api.trace.Span;
-import io.opentelemetry.api.trace.SpanKind;
-import io.opentelemetry.api.trace.StatusCode;
-import io.opentelemetry.api.trace.Tracer;
 import io.smallrye.mutiny.Uni;
+import io.quarkus.hibernate.reactive.panache.common.WithTransaction;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
@@ -40,36 +34,22 @@ import jakarta.inject.Inject;
 public class CategoryQueryServiceImpl implements CategoryQueryService {
         private static final Logger logger = LoggerFactory.getLogger(CategoryQueryServiceImpl.class);
 
-        CategoryQueryRepository categoryQueryRepository;
-        OpenTelemetry openTelemetry;
-        RedisService redisService;
-        ObjectMapper objectMapper;
-
-        private final Tracer tracer;
-        private final LongCounter requestsTotal;
-        private final DoubleHistogram requestDurationSeconds;
+        private final CategoryQueryRepository categoryQueryRepository;
+        private final RedisService redisService;
+        private final ObjectMapper objectMapper;
+        private final TracingMetrics tracingMetrics;
 
         private static final long LIST_CACHE_TTL_SECONDS = 300;
 
         @Inject
         public CategoryQueryServiceImpl(CategoryQueryRepository categoryQueryRepository,
-                        OpenTelemetry openTelemetry,
                         RedisService redisService,
-                        ObjectMapper objectMapper) {
+                        ObjectMapper objectMapper,
+                        TracingMetrics tracingMetrics) {
                 this.categoryQueryRepository = categoryQueryRepository;
-                this.openTelemetry = openTelemetry;
                 this.redisService = redisService;
                 this.objectMapper = objectMapper;
-                this.tracer = openTelemetry.getTracer("category-query-service", "1.0.0");
-                Meter meter = openTelemetry.getMeter("category-query-service");
-
-                this.requestsTotal = meter.counterBuilder("requests_total")
-                                .setDescription("Total number of requests")
-                                .build();
-                this.requestDurationSeconds = meter.histogramBuilder("request_duration_seconds")
-                                .setDescription("Request duration in seconds")
-                                .setUnit("s")
-                                .build();
+                this.tracingMetrics = tracingMetrics;
         }
 
         private String toJson(Object obj) {
@@ -100,376 +80,224 @@ public class CategoryQueryServiceImpl implements CategoryQueryService {
         }
 
         @Override
+        @WithTransaction
         public Uni<ApiResponsePagination<List<CategoryResponse>>> findAll(FindAllCategory req) {
                 String cacheKey = String.format("categories:all:%d:%d:%s", req.getPage(), req.getPageSize(),
                                 req.getSearch() != null ? req.getSearch() : "");
 
                 return redisService.getReactive(cacheKey)
                                 .chain(cachedJson -> {
-                                         if (cachedJson != null) {
-                                                 logger.info("Cache HIT for key: {}", cacheKey);
-                                                 ApiResponsePagination<List<CategoryResponse>> response = fromJson(
-                                                                 cachedJson,
-                                                                 new TypeReference<ApiResponsePagination<List<CategoryResponse>>>() {
-                                                                 });
-                                                 return Uni.createFrom().item(response);
-                                         }
+                                        if (cachedJson != null) {
+                                                logger.info("Cache HIT for key: {}", cacheKey);
+                                                ApiResponsePagination<List<CategoryResponse>> response = fromJson(
+                                                                cachedJson,
+                                                                new TypeReference<ApiResponsePagination<List<CategoryResponse>>>() {
+                                                                });
+                                                return Uni.createFrom().item(response);
+                                        }
 
-                                         logger.info("Cache MISS for key: {}. Fetching from DB.", cacheKey);
-                                         long startTime = System.currentTimeMillis();
-                                         Span span = tracer.spanBuilder("findAllCategories")
-                                                         .setSpanKind(SpanKind.SERVER)
-                                                         .setAttribute("service.name", "category-service")
-                                                         .setAttribute("operation", "find_all_categories")
-                                                         .startSpan();
+                                        logger.info("Cache MISS for key: {}. Fetching from DB.", cacheKey);
+                                        return runTraced("findAllCategories", "find_all_categories", Attributes.empty(),
+                                                        () -> categoryQueryRepository.findCategories(req)
+                                                                        .chain(pagedResult -> {
+                                                                                ApiResponsePagination<List<CategoryResponse>> response = buildPaginatedResponse(
+                                                                                                pagedResult, req,
+                                                                                                "Categories retrieved successfully",
+                                                                                                CategoryResponse::from);
 
-                                         return categoryQueryRepository.findCategories(req)
-                                                         .chain(pagedResult -> {
-                                                                 span.setAttribute("category.count",
-                                                                                 pagedResult.getTotalRecords());
-                                                                 span.setAttribute("category.page", req.getPage());
-                                                                 span.setAttribute("category.size", req.getPageSize());
-
-                                                                 ApiResponsePagination<List<CategoryResponse>> response = buildPaginatedResponse(
-                                                                                 pagedResult, req,
-                                                                                 "Categories retrieved successfully",
-                                                                                 CategoryResponse::from);
-
-                                                                 return redisService
-                                                                                 .setWithExpirationReactive(cacheKey,
-                                                                                                 toJson(response),
-                                                                                                 LIST_CACHE_TTL_SECONDS)
-                                                                                 .map(v -> {
-                                                                                         logger.info("Cached response for key: {}",
-                                                                                                         cacheKey);
-                                                                                         logger.info("Successfully retrieved {} categories",
-                                                                                                         pagedResult.getTotalRecords());
-                                                                                         span.setStatus(StatusCode.OK);
-
-                                                                                         requestsTotal.add(1,
-                                                                                                         Attributes.of(
-                                                                                                                         AttributeKey.stringKey(
-                                                                                                                                         "operation"),
-                                                                                                                         "find_all_categories",
-                                                                                                                         AttributeKey.stringKey(
-                                                                                                                                         "status"),
-                                                                                                                         "success"));
-                                                                                         return response;
-                                                                                 });
-                                                         })
-                                                         .onFailure().recoverWithItem(e -> {
-                                                                 logger.error("💥 Failed to fetch categories: {}",
-                                                                                 e.getMessage(), e);
-                                                                 span.recordException(e);
-                                                                 span.setStatus(StatusCode.ERROR, e.getMessage());
-
-                                                                 requestsTotal.add(1, Attributes.of(
-                                                                                 AttributeKey.stringKey("operation"),
-                                                                                 "find_all_categories",
-                                                                                 AttributeKey.stringKey("status"),
-                                                                                 "failed",
-                                                                                 AttributeKey.stringKey("error_type"),
-                                                                                 e.getClass().getSimpleName()));
-
-                                                                 return new ApiResponsePagination<>("error",
-                                                                                 "Failed to fetch categories: "
-                                                                                                 + e.getMessage(),
-                                                                                 Collections.emptyList(), null);
-                                                         })
-                                                         .eventually(() -> {
-                                                                 span.end();
-                                                                 double duration = (System.currentTimeMillis()
-                                                                                 - startTime) / 1000.0;
-                                                                 requestDurationSeconds.record(duration, Attributes.of(
-                                                                                 AttributeKey.stringKey("operation"),
-                                                                                 "find_all_categories"));
-                                                         });
-                                 });
+                                                                                return redisService
+                                                                                                .setWithExpirationReactive(
+                                                                                                                cacheKey,
+                                                                                                                toJson(response),
+                                                                                                                LIST_CACHE_TTL_SECONDS)
+                                                                                                .map(v -> {
+                                                                                                        logger.info("Cached response for key: {}",
+                                                                                                                        cacheKey);
+                                                                                                        logger.info("Successfully retrieved {} categories",
+                                                                                                                        pagedResult.getTotalRecords());
+                                                                                                        return response;
+                                                                                                });
+                                                                        })
+                                                                        .onFailure().recoverWithItem(e -> {
+                                                                                logger.error("Failed to fetch categories: {}",
+                                                                                                e.getMessage(), e);
+                                                                                return new ApiResponsePagination<>(
+                                                                                                "error",
+                                                                                                "Failed to fetch categories: "
+                                                                                                                + e.getMessage(),
+                                                                                                Collections.emptyList(),
+                                                                                                null);
+                                                                        }));
+                                });
         }
 
         @Override
+        @WithTransaction
         public Uni<ApiResponsePagination<List<CategoryResponseDeleteAt>>> findByActive(FindAllCategory req) {
                 String cacheKey = String.format("categories:active:%d:%d:%s", req.getPage(), req.getPageSize(),
                                 req.getSearch() != null ? req.getSearch() : "");
 
                 return redisService.getReactive(cacheKey)
                                 .chain(cachedJson -> {
-                                         if (cachedJson != null) {
-                                                 logger.info("Cache HIT for key: {}", cacheKey);
-                                                 ApiResponsePagination<List<CategoryResponseDeleteAt>> response = fromJson(
-                                                                 cachedJson,
-                                                                 new TypeReference<ApiResponsePagination<List<CategoryResponseDeleteAt>>>() {
-                                                                 });
-                                                 return Uni.createFrom().item(response);
-                                         }
+                                        if (cachedJson != null) {
+                                                logger.info("Cache HIT for key: {}", cacheKey);
+                                                ApiResponsePagination<List<CategoryResponseDeleteAt>> response = fromJson(
+                                                                cachedJson,
+                                                                new TypeReference<ApiResponsePagination<List<CategoryResponseDeleteAt>>>() {
+                                                                });
+                                                return Uni.createFrom().item(response);
+                                        }
 
-                                         logger.info("Cache MISS for key: {}. Fetching from DB.", cacheKey);
-                                         long startTime = System.currentTimeMillis();
-                                         Span span = tracer.spanBuilder("findActiveCategories")
-                                                         .setSpanKind(SpanKind.SERVER)
-                                                         .setAttribute("service.name", "category-service")
-                                                         .setAttribute("operation", "find_active_categories")
-                                                         .startSpan();
+                                        logger.info("Cache MISS for key: {}. Fetching from DB.", cacheKey);
+                                        return runTraced("findActiveCategories", "find_active_categories",
+                                                        Attributes.empty(),
+                                                        () -> categoryQueryRepository.findActiveCategories(req)
+                                                                        .chain(pagedResult -> {
+                                                                                ApiResponsePagination<List<CategoryResponseDeleteAt>> response = buildPaginatedResponse(
+                                                                                                pagedResult, req,
+                                                                                                "Active categories retrieved successfully",
+                                                                                                CategoryResponseDeleteAt::from);
 
-                                         return categoryQueryRepository.findActiveCategories(req)
-                                                         .chain(pagedResult -> {
-                                                                 span.setAttribute("category.count",
-                                                                                 pagedResult.getTotalRecords());
-                                                                 span.setAttribute("category.page", req.getPage());
-                                                                 span.setAttribute("category.size", req.getPageSize());
-
-                                                                 ApiResponsePagination<List<CategoryResponseDeleteAt>> response = buildPaginatedResponse(
-                                                                                 pagedResult, req,
-                                                                                 "Active categories retrieved successfully",
-                                                                                 CategoryResponseDeleteAt::from);
-
-                                                                 return redisService
-                                                                                 .setWithExpirationReactive(cacheKey,
-                                                                                                 toJson(response),
-                                                                                                 LIST_CACHE_TTL_SECONDS)
-                                                                                 .map(v -> {
-                                                                                         logger.info("Cached response for key: {}",
-                                                                                                         cacheKey);
-                                                                                         logger.info("Successfully retrieved {} active categories",
-                                                                                                         pagedResult.getTotalRecords());
-                                                                                         span.setStatus(StatusCode.OK);
-
-                                                                                         requestsTotal.add(1,
-                                                                                                         Attributes.of(
-                                                                                                                         AttributeKey.stringKey(
-                                                                                                                                         "operation"),
-                                                                                                                         "find_active_categories",
-                                                                                                                         AttributeKey.stringKey(
-                                                                                                                                         "status"),
-                                                                                                                         "success"));
-                                                                                         return response;
-                                                                                 });
-                                                         })
-                                                         .onFailure().recoverWithItem(e -> {
-                                                                 logger.error("💥 Failed to fetch active categories: {}",
-                                                                                 e.getMessage(), e);
-                                                                 span.recordException(e);
-                                                                 span.setStatus(StatusCode.ERROR, e.getMessage());
-
-                                                                 requestsTotal.add(1, Attributes.of(
-                                                                                 AttributeKey.stringKey("operation"),
-                                                                                 "find_active_categories",
-                                                                                 AttributeKey.stringKey("status"),
-                                                                                 "failed",
-                                                                                 AttributeKey.stringKey("error_type"),
-                                                                                 e.getClass().getSimpleName()));
-
-                                                                 return new ApiResponsePagination<>("error",
-                                                                                 "Failed to fetch active categories: "
-                                                                                                 + e.getMessage(),
-                                                                                 Collections.emptyList(), null);
-                                                         })
-                                                         .eventually(() -> {
-                                                                 span.end();
-                                                                 double duration = (System.currentTimeMillis()
-                                                                                 - startTime) / 1000.0;
-                                                                 requestDurationSeconds.record(duration, Attributes.of(
-                                                                                 AttributeKey.stringKey("operation"),
-                                                                                 "find_active_categories"));
-                                                         });
-                                 });
+                                                                                return redisService
+                                                                                                .setWithExpirationReactive(
+                                                                                                                cacheKey,
+                                                                                                                toJson(response),
+                                                                                                                LIST_CACHE_TTL_SECONDS)
+                                                                                                .map(v -> {
+                                                                                                        logger.info("Cached response for key: {}",
+                                                                                                                        cacheKey);
+                                                                                                        logger.info("Successfully retrieved {} active categories",
+                                                                                                                        pagedResult.getTotalRecords());
+                                                                                                        return response;
+                                                                                                });
+                                                                        })
+                                                                        .onFailure().recoverWithItem(e -> {
+                                                                                logger.error("Failed to fetch active categories: {}",
+                                                                                                e.getMessage(), e);
+                                                                                return new ApiResponsePagination<>(
+                                                                                                "error",
+                                                                                                "Failed to fetch active categories: "
+                                                                                                                + e.getMessage(),
+                                                                                                Collections.emptyList(),
+                                                                                                null);
+                                                                        }));
+                                });
         }
 
         @Override
+        @WithTransaction
         public Uni<ApiResponsePagination<List<CategoryResponseDeleteAt>>> findByTrashed(FindAllCategory req) {
                 String cacheKey = String.format("categories:trashed:%d:%d:%s", req.getPage(), req.getPageSize(),
                                 req.getSearch() != null ? req.getSearch() : "");
 
                 return redisService.getReactive(cacheKey)
                                 .chain(cachedJson -> {
-                                         if (cachedJson != null) {
-                                                 logger.info("Cache HIT for key: {}", cacheKey);
-                                                 ApiResponsePagination<List<CategoryResponseDeleteAt>> response = fromJson(
-                                                                 cachedJson,
-                                                                 new TypeReference<ApiResponsePagination<List<CategoryResponseDeleteAt>>>() {
-                                                                 });
-                                                 return Uni.createFrom().item(response);
-                                         }
+                                        if (cachedJson != null) {
+                                                logger.info("Cache HIT for key: {}", cacheKey);
+                                                ApiResponsePagination<List<CategoryResponseDeleteAt>> response = fromJson(
+                                                                cachedJson,
+                                                                new TypeReference<ApiResponsePagination<List<CategoryResponseDeleteAt>>>() {
+                                                                });
+                                                return Uni.createFrom().item(response);
+                                        }
 
-                                         logger.info("Cache MISS for key: {}. Fetching from DB.", cacheKey);
-                                         long startTime = System.currentTimeMillis();
-                                         Span span = tracer.spanBuilder("findTrashedCategories")
-                                                         .setSpanKind(SpanKind.SERVER)
-                                                         .setAttribute("service.name", "category-service")
-                                                         .setAttribute("operation", "find_trashed_categories")
-                                                         .startSpan();
+                                        logger.info("Cache MISS for key: {}. Fetching from DB.", cacheKey);
+                                        return runTraced("findTrashedCategories", "find_trashed_categories",
+                                                        Attributes.empty(),
+                                                        () -> categoryQueryRepository.findTrashedCategories(req)
+                                                                        .chain(pagedResult -> {
+                                                                                ApiResponsePagination<List<CategoryResponseDeleteAt>> response = buildPaginatedResponse(
+                                                                                                pagedResult, req,
+                                                                                                "Trashed categories retrieved successfully",
+                                                                                                CategoryResponseDeleteAt::from);
 
-                                         return categoryQueryRepository.findTrashedCategories(req)
-                                                         .chain(pagedResult -> {
-                                                                 span.setAttribute("category.count",
-                                                                                 pagedResult.getTotalRecords());
-                                                                 span.setAttribute("category.page", req.getPage());
-                                                                 span.setAttribute("category.size", req.getPageSize());
-
-                                                                 ApiResponsePagination<List<CategoryResponseDeleteAt>> response = buildPaginatedResponse(
-                                                                                 pagedResult, req,
-                                                                                 "Trashed categories retrieved successfully",
-                                                                                 CategoryResponseDeleteAt::from);
-
-                                                                 return redisService
-                                                                                 .setWithExpirationReactive(cacheKey,
-                                                                                                 toJson(response),
-                                                                                                 LIST_CACHE_TTL_SECONDS)
-                                                                                 .map(v -> {
-                                                                                         logger.info("Cached response for key: {}",
-                                                                                                         cacheKey);
-                                                                                         logger.info("Successfully retrieved {} trashed categories",
-                                                                                                         pagedResult.getTotalRecords());
-                                                                                         span.setStatus(StatusCode.OK);
-
-                                                                                         requestsTotal.add(1,
-                                                                                                         Attributes.of(
-                                                                                                                         AttributeKey.stringKey(
-                                                                                                                                         "operation"),
-                                                                                                                         "find_trashed_categories",
-                                                                                                                         AttributeKey.stringKey(
-                                                                                                                                         "status"),
-                                                                                                                         "success"));
-                                                                                         return response;
-                                                                                 });
-                                                         })
-                                                         .onFailure().recoverWithItem(e -> {
-                                                                 logger.error("💥 Failed to fetch trashed categories: {}",
-                                                                                 e.getMessage(), e);
-                                                                 span.recordException(e);
-                                                                 span.setStatus(StatusCode.ERROR, e.getMessage());
-
-                                                                 requestsTotal.add(1, Attributes.of(
-                                                                                 AttributeKey.stringKey("operation"),
-                                                                                 "find_trashed_categories",
-                                                                                 AttributeKey.stringKey("status"),
-                                                                                 "failed",
-                                                                                 AttributeKey.stringKey("error_type"),
-                                                                                 e.getClass().getSimpleName()));
-
-                                                                 return new ApiResponsePagination<>("error",
-                                                                                 "Failed to fetch trashed categories: "
-                                                                                                 + e.getMessage(),
-                                                                                 Collections.emptyList(), null);
-                                                         })
-                                                         .eventually(() -> {
-                                                                 span.end();
-                                                                 double duration = (System.currentTimeMillis()
-                                                                                 - startTime) / 1000.0;
-                                                                 requestDurationSeconds.record(duration, Attributes.of(
-                                                                                 AttributeKey.stringKey("operation"),
-                                                                                 "find_trashed_categories"));
-                                                         });
-                                 });
+                                                                                return redisService
+                                                                                                .setWithExpirationReactive(
+                                                                                                                cacheKey,
+                                                                                                                toJson(response),
+                                                                                                                LIST_CACHE_TTL_SECONDS)
+                                                                                                .map(v -> {
+                                                                                                        logger.info("Cached response for key: {}",
+                                                                                                                        cacheKey);
+                                                                                                        logger.info("Successfully retrieved {} trashed categories",
+                                                                                                                        pagedResult.getTotalRecords());
+                                                                                                        return response;
+                                                                                                });
+                                                                        })
+                                                                        .onFailure().recoverWithItem(e -> {
+                                                                                logger.error("Failed to fetch trashed categories: {}",
+                                                                                                e.getMessage(), e);
+                                                                                return new ApiResponsePagination<>(
+                                                                                                "error",
+                                                                                                "Failed to fetch trashed categories: "
+                                                                                                                + e.getMessage(),
+                                                                                                Collections.emptyList(),
+                                                                                                null);
+                                                                        }));
+                                });
         }
 
         @Override
+        @WithTransaction
         public Uni<ApiResponse<CategoryResponse>> findById(Integer categoryId) {
                 String cacheKey = "category:" + categoryId;
 
                 return redisService.getReactive(cacheKey)
                                 .chain(cachedJson -> {
-                                         if (cachedJson != null) {
-                                                 logger.info("Cache HIT for key: {}", cacheKey);
-                                                 CategoryResponse cachedResponse = fromJson(cachedJson,
-                                                                 CategoryResponse.class);
-                                                 return Uni.createFrom().item(ApiResponse.success(
-                                                                 "Category retrieved successfully", cachedResponse));
-                                         }
+                                        if (cachedJson != null) {
+                                                logger.info("Cache HIT for key: {}", cacheKey);
+                                                CategoryResponse cachedResponse = fromJson(cachedJson,
+                                                                CategoryResponse.class);
+                                                return Uni.createFrom().item(ApiResponse.success(
+                                                                "Category retrieved successfully", cachedResponse));
+                                        }
 
-                                         logger.info("Cache MISS for key: {}. Fetching from DB.", cacheKey);
-                                         long startTime = System.currentTimeMillis();
-                                         Span span = tracer.spanBuilder("findCategoryById")
-                                                         .setSpanKind(SpanKind.SERVER)
-                                                         .setAttribute("service.name", "category-service")
-                                                         .setAttribute("operation", "find_category_by_id")
-                                                         .setAttribute("category.id", categoryId.toString())
-                                                         .startSpan();
+                                        logger.info("Cache MISS for key: {}. Fetching from DB.", cacheKey);
+                                        Attributes attrs = Attributes.builder()
+                                                        .put("category.id", categoryId.toString())
+                                                        .build();
 
-                                         return categoryQueryRepository.findCategoryById(categoryId.longValue())
-                                                         .chain(category -> {
-                                                                 if (category == null) {
-                                                                         logger.warn("Category not found with id: {}",
-                                                                                         categoryId);
-                                                                         span.setStatus(StatusCode.ERROR,
-                                                                                         "Category not found");
-                                                                         span.setAttribute("category.found", false);
+                                        return runTraced("findCategoryById", "find_category_by_id", attrs,
+                                                        () -> categoryQueryRepository
+                                                                        .findCategoryById(categoryId.longValue())
+                                                                        .chain(category -> {
+                                                                                if (category == null) {
+                                                                                        logger.warn("Category not found with id: {}",
+                                                                                                        categoryId);
+                                                                                        return Uni.createFrom().item(
+                                                                                                        new ApiResponse<>(
+                                                                                                                        "error",
+                                                                                                                        "Category not found",
+                                                                                                                        (CategoryResponse) null));
+                                                                                }
 
-                                                                         requestsTotal.add(1, Attributes.of(
-                                                                                         AttributeKey.stringKey(
-                                                                                                         "operation"),
-                                                                                                         "find_category_by_id",
-                                                                                                         AttributeKey.stringKey(
-                                                                                                         "status"),
-                                                                                                         "failed",
-                                                                                                         AttributeKey.stringKey(
-                                                                                                         "error_type"),
-                                                                                                         "not_found"));
+                                                                                CategoryResponse categoryResponse = CategoryResponse
+                                                                                                .from(category);
 
-                                                                         return Uni.createFrom().item(new ApiResponse<>(
-                                                                                         "error", "Category not found",
-                                                                                         (CategoryResponse) null));
-                                                                 }
-
-                                                                 span.setAttribute("category.found", true);
-                                                                 span.setAttribute("category.name", category.getName());
-
-                                                                 CategoryResponse categoryResponse = CategoryResponse
-                                                                                 .from(category);
-
-                                                                 return redisService
-                                                                                 .setReactive(cacheKey, toJson(
-                                                                                                 categoryResponse))
-                                                                                 .map(v -> {
-                                                                                         logger.info("Cached category for key: {}",
-                                                                                                         cacheKey);
-                                                                                         logger.info("Successfully found category with id: {} and name: {}",
-                                                                                                         categoryId,
-                                                                                                         category.getName());
-                                                                                         span.setStatus(StatusCode.OK);
-
-                                                                                         requestsTotal.add(1,
-                                                                                                         Attributes.of(
-                                                                                                                         AttributeKey.stringKey(
-                                                                                                                                         "operation"),
-                                                                                                                         "find_category_by_id",
-                                                                                                                         AttributeKey.stringKey(
-                                                                                                                                         "status"),
-                                                                                                                         "success"));
-
-                                                                                         return ApiResponse.success(
-                                                                                                         "Category retrieved successfully",
-                                                                                                         categoryResponse);
-                                                                                 });
-                                                         })
-                                                         .onFailure().recoverWithItem(e -> {
-                                                                 logger.error("💥 Failed to fetch category by id={}: {}",
-                                                                                 categoryId, e.getMessage(), e);
-                                                                 span.recordException(e);
-                                                                 span.setStatus(StatusCode.ERROR, e.getMessage());
-
-                                                                 requestsTotal.add(1, Attributes.of(
-                                                                                 AttributeKey.stringKey("operation"),
-                                                                                 "find_category_by_id",
-                                                                                 AttributeKey.stringKey("status"),
-                                                                                 "failed",
-                                                                                 AttributeKey.stringKey("error_type"),
-                                                                                 e.getClass().getSimpleName()));
-
-                                                                 return new ApiResponse<>("error",
-                                                                                 "Failed to fetch category: "
-                                                                                                 + e.getMessage(),
-                                                                                 (CategoryResponse) null);
-                                                         })
-                                                         .eventually(() -> {
-                                                                 span.end();
-                                                                 double duration = (System.currentTimeMillis()
-                                                                                 - startTime) / 1000.0;
-                                                                 requestDurationSeconds.record(duration, Attributes.of(
-                                                                                 AttributeKey.stringKey("operation"),
-                                                                                 "find_category_by_id"));
-                                                         });
-                                 });
+                                                                                return redisService.setReactive(
+                                                                                                cacheKey,
+                                                                                                toJson(categoryResponse))
+                                                                                                .map(v -> {
+                                                                                                        logger.info("Cached category for key: {}",
+                                                                                                                        cacheKey);
+                                                                                                        logger.info("Successfully found category with id: {} and name: {}",
+                                                                                                                        categoryId,
+                                                                                                                        category.getName());
+                                                                                                        return ApiResponse
+                                                                                                                        .success("Category retrieved successfully",
+                                                                                                                                        categoryResponse);
+                                                                                                });
+                                                                        })
+                                                                        .onFailure().recoverWithItem(e -> {
+                                                                                logger.error("Failed to fetch category by id={}: {}",
+                                                                                                categoryId,
+                                                                                                e.getMessage(), e);
+                                                                                return new ApiResponse<>("error",
+                                                                                                "Failed to fetch category: "
+                                                                                                                + e.getMessage(),
+                                                                                                (CategoryResponse) null);
+                                                                        }));
+                                });
         }
 
         private <T, R> ApiResponsePagination<List<R>> buildPaginatedResponse(
@@ -489,5 +317,10 @@ public class CategoryQueryServiceImpl implements CategoryQueryService {
                 PaginationMeta pagination = new PaginationMeta(request.getPage(), size, totalPages, totalRecords);
 
                 return new ApiResponsePagination<>("success", successMessage, data, pagination);
+        }
+
+        private <T> Uni<T> runTraced(String operationName, String method, Attributes attributes,
+                        Supplier<Uni<T>> supplier) {
+                return tracingMetrics.traceAndMeasure(operationName, method, attributes, supplier);
         }
 }

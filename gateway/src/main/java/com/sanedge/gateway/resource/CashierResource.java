@@ -4,6 +4,10 @@ import org.eclipse.microprofile.openapi.annotations.Operation;
 import org.eclipse.microprofile.openapi.annotations.tags.Tag;
 
 import com.sanedge.gateway.dto.CashierDto;
+import com.sanedge.gateway.domain.requests.FindAllCashiersRequest;
+import com.sanedge.gateway.domain.requests.FindCashiersByMerchantRequest;
+import com.sanedge.gateway.domain.requests.GetCashierMonthlyTotalSalesRequest;
+import com.sanedge.gateway.domain.requests.GetCashierMonthlyTotalSalesByMerchantRequest;
 import com.sanedge.gateway.service.CashierService;
 
 import io.smallrye.mutiny.Uni;
@@ -39,7 +43,8 @@ public class CashierResource {
                         @QueryParam("page") @DefaultValue("1") int page,
                         @QueryParam("size") @DefaultValue("20") int size,
                         @QueryParam("search") String search) {
-                return cashierService.listCashiers(page, size, search)
+                FindAllCashiersRequest request = new FindAllCashiersRequest(search, page, size);
+                return cashierService.listCashiers(request)
                                 .map(res -> Response.ok(res).build());
         }
 
@@ -60,7 +65,8 @@ public class CashierResource {
                         @QueryParam("page") @DefaultValue("1") int page,
                         @QueryParam("size") @DefaultValue("20") int size,
                         @QueryParam("search") String search) {
-                return cashierService.getActiveCashiers(page, size, search)
+                FindAllCashiersRequest request = new FindAllCashiersRequest(search, page, size);
+                return cashierService.getActiveCashiers(request)
                                 .map(res -> Response.ok(res).build());
         }
 
@@ -72,7 +78,8 @@ public class CashierResource {
                         @QueryParam("page") @DefaultValue("1") int page,
                         @QueryParam("size") @DefaultValue("20") int size,
                         @QueryParam("search") String search) {
-                return cashierService.getTrashedCashiers(page, size, search)
+                FindAllCashiersRequest request = new FindAllCashiersRequest(search, page, size);
+                return cashierService.getTrashedCashiers(request)
                                 .map(res -> Response.ok(res).build());
         }
 
@@ -85,7 +92,8 @@ public class CashierResource {
                         @QueryParam("page") @DefaultValue("1") int page,
                         @QueryParam("size") @DefaultValue("20") int size,
                         @QueryParam("search") String search) {
-                return cashierService.getCashiersByMerchant(merchantId, page, size, search)
+                FindCashiersByMerchantRequest request = new FindCashiersByMerchantRequest(merchantId, page, size, search);
+                return cashierService.getCashiersByMerchant(request)
                                 .map(res -> Response.ok(res).build());
         }
 
@@ -181,7 +189,8 @@ public class CashierResource {
                         @PathParam("cashierId") int cashierId,
                         @QueryParam("year") int year,
                         @QueryParam("month") int month) {
-                return cashierService.getMonthlyTotalSalesById(cashierId, year, month)
+                GetCashierMonthlyTotalSalesRequest request = new GetCashierMonthlyTotalSalesRequest(cashierId, year, month);
+                return cashierService.getMonthlyTotalSalesById(request)
                                 .map(res -> Response.ok(res).build());
         }
 
@@ -204,7 +213,8 @@ public class CashierResource {
                         @PathParam("merchantId") int merchantId,
                         @QueryParam("year") int year,
                         @QueryParam("month") int month) {
-                return cashierService.getMonthlyTotalSalesByMerchant(merchantId, year, month)
+                GetCashierMonthlyTotalSalesByMerchantRequest request = new GetCashierMonthlyTotalSalesByMerchantRequest(merchantId, year, month);
+                return cashierService.getMonthlyTotalSalesByMerchant(request)
                                 .map(res -> Response.ok(res).build());
         }
 

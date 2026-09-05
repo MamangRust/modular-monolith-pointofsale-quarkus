@@ -64,27 +64,6 @@ services:
       timeout: 5s
       retries: 5
 
-  db-migration:
-    build:
-      context: ../..
-      dockerfile: db-migration/Dockerfile
-    image: monolith-point-of-sale-grpc-vertx/db-migration:latest
-    container_name: db-migration
-    env_file: ./docker.env
-    volumes:
-      - ./docker.env:/app/docker.env
-    networks:
-      - app_network
-    depends_on:
-      postgres:
-        condition: service_healthy
-    environment:
-      - DB_HOST=postgres
-      - DB_PORT=5432
-      - DB_USER=DRAGON
-      - DB_PASS=DRAGON
-      - DB_NAME=POINT_OF_SALE
-
   postgres-exporter:
     image: prometheuscommunity/postgres-exporter:latest
     container_name: postgres_exporter
@@ -267,6 +246,10 @@ services:
     environment:
       KAFKA_NODE_ID: 1
       KAFKA_PROCESS_ROLES: broker,controller
+      # Fase 14 (K-6): PLAINTEXT DI SINI HANYA UNTUK DEV LOKAL.
+      # Produksi (k8s base) memakai SASL_SSL + SCRAM-SHA-256 + TLS — lihat
+      # deployments/kubernetes/base/kafka/kafka-deployment.yaml. Untuk menguji
+      # SASL lokal, aktifkan listener SASL_PLAINTEXT (lihat komentar di bawah).
       KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
       KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
       KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
@@ -278,6 +261,9 @@ services:
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      # Fase 14 (K-7): topik auto-created (termasuk email-service-topic-*) dibuat
+      # dengan 3 partition agar consumer email bisa diskalakan (>1 replica/HPA).
+      KAFKA_NUM_PARTITIONS: "3"
     networks:
       - app_network
     healthcheck:
@@ -326,6 +312,9 @@ services:
       - GF_SECURITY_ADMIN_PASSWORD=admin
     volumes:
       - grafana-storage:/var/lib/grafana
+      # Grafana provisioning (Phase 6): datasources + email-service dashboard.
+      - ./observability/grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro
+      - ./observability/grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro
     networks:
       - app_network
     depends_on:
@@ -411,11 +400,32 @@ services:
     networks:
       - app_network
 
+  db-migration:
+    build:
+      context: ../..
+      dockerfile: db-migration/Dockerfile
+    image: quarkus-grpc-pointofsale/db-migration:latest
+    container_name: db-migration
+    env_file: ./docker.env
+    volumes:
+      - ./docker.env:/app/docker.env
+    networks:
+      - app_network
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_USER=DRAGON
+      - DB_PASS=DRAGON
+      - DB_NAME=POINT_OF_SALE
+
   apigateway:
     build:
       context: ../..
       dockerfile: gateway/Dockerfile
-    image: monolith-point-of-sale-grpc-vertx/apigateway:latest
+    image: quarkus-grpc-pointofsale/apigateway:latest
     container_name: apigateway
     env_file: ./docker.env
     volumes:
@@ -428,12 +438,12 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      db-migration:
-        condition: service_completed_successfully
       kafka:
         condition: service_healthy
       redis-node-1:
         condition: service_started
+      db-migration:
+        condition: service_completed_successfully
       auth:
         condition: service_started
       role:
@@ -462,12 +472,13 @@ services:
       - APP_ENV=docker
       - KAFKA_BROKERS=kafka:9092
       - HTTP_PORT=5000
+      - QUARKUS_HTTP_PORT=5000
 
   auth:
     build:
       context: ../..
       dockerfile: auth/Dockerfile
-    image: monolith-point-of-sale-grpc-vertx/auth:latest
+    image: quarkus-grpc-pointofsale/auth:latest
     container_name: auth
     env_file: ./docker.env
     volumes:
@@ -499,7 +510,7 @@ services:
     build:
       context: ../..
       dockerfile: merchant/Dockerfile
-    image: monolith-point-of-sale-grpc-vertx/merchant:latest
+    image: quarkus-grpc-pointofsale/merchant:latest
     container_name: merchant
     env_file: ./docker.env
     volumes:
@@ -531,7 +542,7 @@ services:
     build:
       context: ../..
       dockerfile: role/Dockerfile
-    image: monolith-point-of-sale-grpc-vertx/role:latest
+    image: quarkus-grpc-pointofsale/role:latest
     container_name: role
     env_file: ./docker.env
     volumes:
@@ -563,7 +574,7 @@ services:
     build:
       context: ../..
       dockerfile: user/Dockerfile
-    image: monolith-point-of-sale-grpc-vertx/user:latest
+    image: quarkus-grpc-pointofsale/user:latest
     container_name: user
     env_file: ./docker.env
     volumes:
@@ -590,14 +601,14 @@ services:
       - OTEL_ENDPOINT=otel-collector:4317
       - APP_ENV=docker
       - KAFKA_BROKERS=kafka:9092
-      - GRPC_PORT=9011
-      - QUARKUS_GRPC_SERVER_PORT=9011
+      - GRPC_PORT=${GRPC_USER_PORT}
+      - QUARKUS_GRPC_SERVER_PORT=${GRPC_USER_PORT}
 
   transaction:
     build:
       context: ../..
       dockerfile: transaction/Dockerfile
-    image: monolith-point-of-sale-grpc-vertx/transaction:latest
+    image: quarkus-grpc-pointofsale/transaction:latest
     container_name: transaction
     env_file: ./docker.env
     volumes:
@@ -629,7 +640,7 @@ services:
     build:
       context: ../..
       dockerfile: cashier/Dockerfile
-    image: monolith-point-of-sale-grpc-vertx/cashier:latest
+    image: quarkus-grpc-pointofsale/cashier:latest
     container_name: cashier
     env_file: ./docker.env
     volumes:
@@ -661,7 +672,7 @@ services:
     build:
       context: ../..
       dockerfile: category/Dockerfile
-    image: monolith-point-of-sale-grpc-vertx/category:latest
+    image: quarkus-grpc-pointofsale/category:latest
     container_name: category
     env_file: ./docker.env
     volumes:
@@ -693,7 +704,7 @@ services:
     build:
       context: ../..
       dockerfile: product/Dockerfile
-    image: monolith-point-of-sale-grpc-vertx/product:latest
+    image: quarkus-grpc-pointofsale/product:latest
     container_name: product
     env_file: ./docker.env
     volumes:
@@ -725,7 +736,7 @@ services:
     build:
       context: ../..
       dockerfile: order/Dockerfile
-    image: monolith-point-of-sale-grpc-vertx/order:latest
+    image: quarkus-grpc-pointofsale/order:latest
     container_name: order
     env_file: ./docker.env
     volumes:
@@ -757,7 +768,7 @@ services:
     build:
       context: ../..
       dockerfile: order_item/Dockerfile
-    image: monolith-point-of-sale-grpc-vertx/order_item:latest
+    image: quarkus-grpc-pointofsale/order_item:latest
     container_name: order_item
     env_file: ./docker.env
     volumes:
@@ -789,7 +800,7 @@ services:
     build:
       context: ../..
       dockerfile: email-service/Dockerfile
-    image: monolith-point-of-sale-grpc-vertx/email-service:latest
+    image: quarkus-grpc-pointofsale/email-service:latest
     container_name: email-service
     env_file: ./docker.env
     volumes:
@@ -809,6 +820,8 @@ services:
       - SMTP_PORT=${SMTP_PORT}
       - SMTP_USER=${SMTP_USER}
       - SMTP_PASS=${SMTP_PASS}
+      - HTTP_PORT=8098
+      - QUARKUS_HTTP_PORT=8098
 
 volumes:
   loki-data:

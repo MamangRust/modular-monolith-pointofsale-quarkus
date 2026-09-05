@@ -55,7 +55,12 @@ public class AuthGrpcHandler extends pb.MutinyAuthServiceGrpc.AuthServiceImplBas
 
     @Override
     public Uni<ApiResponseResetPassword> resetPassword(ResetPasswordRequest request) {
-        return authService.resetPassword(request.getResetToken(), request.getPassword(), request.getConfirmPassword())
+        com.sanedge.auth.domain.requests.ResetPasswordRequest req = new com.sanedge.auth.domain.requests.ResetPasswordRequest();
+        req.setToken(request.getResetToken());
+        req.setPassword(request.getPassword());
+        req.setConfirmPassword(request.getConfirmPassword());
+
+        return authService.resetPassword(req)
                 .map(v -> ApiResponseResetPassword.newBuilder()
                         .setStatus("success")
                         .setMessage("Password reset successfully")
@@ -68,8 +73,14 @@ public class AuthGrpcHandler extends pb.MutinyAuthServiceGrpc.AuthServiceImplBas
 
     @Override
     public Uni<ApiResponseRegister> registerUser(RegisterRequest request) {
+        com.sanedge.auth.domain.requests.RegisterRequest req = new com.sanedge.auth.domain.requests.RegisterRequest();
+        req.setFirstName(request.getFirstname());
+        req.setLastName(request.getLastname());
+        req.setEmail(request.getEmail());
+        req.setPassword(request.getPassword());
+
         return authService
-                .register(request.getFirstname(), request.getLastname(), request.getEmail(), request.getPassword())
+                .register(req)
                 .map(user -> ApiResponseRegister.newBuilder()
                         .setStatus("success")
                         .setMessage("User registered successfully. Verification email sent.")

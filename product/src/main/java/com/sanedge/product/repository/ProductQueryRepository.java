@@ -1,6 +1,8 @@
 package com.sanedge.product.repository;
 
 import com.sanedge.product.domain.requests.FindAllProductByMerchantRequest;
+import com.sanedge.product.domain.requests.FindAllProductRequest;
+import com.sanedge.product.domain.requests.FindAllProductByCategoryRequest;
 import com.sanedge.common.domain.response.PagedResult;
 import com.sanedge.product.entity.Product;
 
@@ -11,53 +13,53 @@ import jakarta.enterprise.context.ApplicationScoped;
 @ApplicationScoped
 public class ProductQueryRepository implements PanacheRepository<Product> {
 
-    public Uni<PagedResult<Product>> findAllProducts(String search, int page, int size) {
-        int pageIndex = page > 0 ? page - 1 : 0;
-        String searchKeyword = (search != null && !search.trim().isEmpty()) ? search.trim() : null;
+    public Uni<PagedResult<Product>> findAllProducts(FindAllProductRequest req) {
+        int pageIndex = req.getPage() > 0 ? req.getPage() - 1 : 0;
+        String searchKeyword = (req.getSearch() != null && !req.getSearch().trim().isEmpty()) ? req.getSearch().trim() : null;
 
         var query = """
-                    ?1 IS NULL OR LOWER(name) LIKE LOWER(CONCAT('%', ?1, '%'))
+                    CAST(?1 AS string) IS NULL OR LOWER(name) LIKE LOWER(CONCAT('%', ?1, '%'))
                     ORDER BY createdAt ASC
                 """;
 
         var panacheQuery = find(query, searchKeyword)
-                .page(pageIndex, size);
+                .page(pageIndex, req.getPageSize());
 
         return Uni.combine().all().unis(panacheQuery.list(), panacheQuery.count())
                 .asTuple()
                 .map(tuple -> new PagedResult<>(tuple.getItem1(), tuple.getItem2().intValue()));
     }
 
-    public Uni<PagedResult<Product>> findActiveProducts(String search, int page, int size) {
-        int pageIndex = page > 0 ? page - 1 : 0;
-        String searchKeyword = (search != null && !search.trim().isEmpty()) ? search.trim() : null;
+    public Uni<PagedResult<Product>> findActiveProducts(FindAllProductRequest req) {
+        int pageIndex = req.getPage() > 0 ? req.getPage() - 1 : 0;
+        String searchKeyword = (req.getSearch() != null && !req.getSearch().trim().isEmpty()) ? req.getSearch().trim() : null;
 
         var query = """
                     deletedAt IS NULL
-                    AND (?1 IS NULL OR LOWER(name) LIKE LOWER(CONCAT('%', ?1, '%')))
+                    AND (CAST(?1 AS string) IS NULL OR LOWER(name) LIKE LOWER(CONCAT('%', ?1, '%')))
                     ORDER BY createdAt ASC
                 """;
 
         var panacheQuery = find(query, searchKeyword)
-                .page(pageIndex, size);
+                .page(pageIndex, req.getPageSize());
 
         return Uni.combine().all().unis(panacheQuery.list(), panacheQuery.count())
                 .asTuple()
                 .map(tuple -> new PagedResult<>(tuple.getItem1(), tuple.getItem2().intValue()));
     }
 
-    public Uni<PagedResult<Product>> findTrashedProducts(String search, int page, int size) {
-        int pageIndex = page > 0 ? page - 1 : 0;
-        String searchKeyword = (search != null && !search.trim().isEmpty()) ? search.trim() : null;
+    public Uni<PagedResult<Product>> findTrashedProducts(FindAllProductRequest req) {
+        int pageIndex = req.getPage() > 0 ? req.getPage() - 1 : 0;
+        String searchKeyword = (req.getSearch() != null && !req.getSearch().trim().isEmpty()) ? req.getSearch().trim() : null;
 
         var query = """
                     deletedAt IS NOT NULL
-                    AND (?1 IS NULL OR LOWER(name) LIKE LOWER(CONCAT('%', ?1, '%')))
+                    AND (CAST(?1 AS string) IS NULL OR LOWER(name) LIKE LOWER(CONCAT('%', ?1, '%')))
                     ORDER BY deletedAt DESC
                 """;
 
         var panacheQuery = find(query, searchKeyword)
-                .page(pageIndex, size);
+                .page(pageIndex, req.getPageSize());
 
         return Uni.combine().all().unis(panacheQuery.list(), panacheQuery.count())
                 .asTuple()
@@ -80,10 +82,10 @@ public class ProductQueryRepository implements PanacheRepository<Product> {
         var query = """
                     deletedAt IS NULL
                     AND merchantId = ?1
-                    AND (?2 IS NULL OR LOWER(name) LIKE LOWER(CONCAT('%', ?2, '%')))
-                    AND (?3 IS NULL OR categoryId = ?3)
-                    AND (?4 IS NULL OR price >= ?4)
-                    AND (?5 IS NULL OR price <= ?5)
+                    AND (CAST(?2 AS string) IS NULL OR LOWER(name) LIKE LOWER(CONCAT('%', ?2, '%')))
+                    AND (CAST(?3 AS long) IS NULL OR categoryId = ?3)
+                    AND (CAST(?4 AS big_decimal) IS NULL OR price >= ?4)
+                    AND (CAST(?5 AS big_decimal) IS NULL OR price <= ?5)
                     ORDER BY createdAt ASC
                 """;
 
@@ -95,24 +97,23 @@ public class ProductQueryRepository implements PanacheRepository<Product> {
                 .map(tuple -> new PagedResult<>(tuple.getItem1(), tuple.getItem2().intValue()));
     }
 
-    public Uni<PagedResult<Product>> findProductsByCategory(
-            String categoryName, String search, Integer minPrice, Integer maxPrice, int page, int size) {
-        int pageIndex = page > 0 ? page - 1 : 0;
-        String searchKeyword = (search != null && !search.trim().isEmpty()) ? search.trim() : null;
+    public Uni<PagedResult<Product>> findProductsByCategory(FindAllProductByCategoryRequest req) {
+        int pageIndex = req.getPage() > 0 ? req.getPage() - 1 : 0;
+        String searchKeyword = (req.getSearch() != null && !req.getSearch().trim().isEmpty()) ? req.getSearch().trim() : null;
 
         var query = """
                     SELECT p FROM Product p, Category c
                     WHERE p.categoryId = c.id
                     AND p.deletedAt IS NULL
                     AND LOWER(c.name) = LOWER(?1)
-                    AND (?2 IS NULL OR LOWER(p.name) LIKE LOWER(CONCAT('%', ?2, '%')))
-                    AND (?3 IS NULL OR p.price >= ?3)
-                    AND (?4 IS NULL OR p.price <= ?4)
+                    AND (CAST(?2 AS string) IS NULL OR LOWER(p.name) LIKE LOWER(CONCAT('%', ?2, '%')))
+                    AND (CAST(?3 AS big_decimal) IS NULL OR p.price >= ?3)
+                    AND (CAST(?4 AS big_decimal) IS NULL OR p.price <= ?4)
                     ORDER BY p.createdAt ASC
                 """;
 
-        var panacheQuery = find(query, categoryName, searchKeyword, minPrice, maxPrice)
-                .page(pageIndex, size);
+        var panacheQuery = find(query, req.getCategoryName(), searchKeyword, req.getMinPrice(), req.getMaxPrice())
+                .page(pageIndex, req.getPageSize());
 
         return Uni.combine().all().unis(panacheQuery.list(), panacheQuery.count())
                 .asTuple()

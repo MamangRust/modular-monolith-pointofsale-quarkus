@@ -1,12 +1,11 @@
 package com.sanedge.order.handler;
 
 import com.google.protobuf.Empty;
-import com.sanedge.common.domain.response.ApiResponse;
 import com.sanedge.order.domain.response.OrderResponse;
 import com.sanedge.order.domain.response.OrderResponseDeleteAt;
 import com.sanedge.order.service.OrderCommandService;
 
-import io.grpc.Status;
+import com.sanedge.common.grpc.GrpcErrorMapper;
 import io.quarkus.grpc.GrpcService;
 import io.smallrye.mutiny.Uni;
 import jakarta.inject.Inject;
@@ -16,8 +15,8 @@ import pb.order.Order.ApiResponseOrder;
 import pb.order.Order.ApiResponseOrderAll;
 import pb.order.Order.ApiResponseOrderDelete;
 import pb.order.Order.ApiResponseOrderDeleteAt;
-import pb.order.Order.FindByIdOrderRequest;
 import pb.order.Order.CreateOrderRequest;
+import pb.order.Order.FindByIdOrderRequest;
 import pb.order.Order.UpdateOrderRequest;
 import pb.order.OrderCommand.UpdateOrderTotalPriceRequest;
 
@@ -53,7 +52,7 @@ public class OrderCommandGrpcHandler extends MutinyOrderCommandServiceGrpc.Order
                     }
                     return builder.build();
                 })
-                .onFailure().transform(e -> Status.INTERNAL.withDescription(e.getMessage()).asRuntimeException());
+                .onFailure().transform(GrpcErrorMapper::toStatusRuntimeException);
     }
 
     @Override
@@ -82,7 +81,7 @@ public class OrderCommandGrpcHandler extends MutinyOrderCommandServiceGrpc.Order
                     }
                     return builder.build();
                 })
-                .onFailure().transform(e -> Status.INTERNAL.withDescription(e.getMessage()).asRuntimeException());
+                .onFailure().transform(GrpcErrorMapper::toStatusRuntimeException);
     }
 
     @Override
@@ -97,7 +96,7 @@ public class OrderCommandGrpcHandler extends MutinyOrderCommandServiceGrpc.Order
                     }
                     return builder.build();
                 })
-                .onFailure().transform(e -> Status.INTERNAL.withDescription(e.getMessage()).asRuntimeException());
+                .onFailure().transform(GrpcErrorMapper::toStatusRuntimeException);
     }
 
     @Override
@@ -112,7 +111,7 @@ public class OrderCommandGrpcHandler extends MutinyOrderCommandServiceGrpc.Order
                     }
                     return builder.build();
                 })
-                .onFailure().transform(e -> Status.INTERNAL.withDescription(e.getMessage()).asRuntimeException());
+                .onFailure().transform(GrpcErrorMapper::toStatusRuntimeException);
     }
 
     @Override
@@ -122,7 +121,7 @@ public class OrderCommandGrpcHandler extends MutinyOrderCommandServiceGrpc.Order
                         .setStatus(apiResp.status())
                         .setMessage(apiResp.message())
                         .build())
-                .onFailure().transform(e -> Status.INTERNAL.withDescription(e.getMessage()).asRuntimeException());
+                .onFailure().transform(GrpcErrorMapper::toStatusRuntimeException);
     }
 
     @Override
@@ -132,7 +131,7 @@ public class OrderCommandGrpcHandler extends MutinyOrderCommandServiceGrpc.Order
                         .setStatus(apiResp.status())
                         .setMessage(apiResp.message())
                         .build())
-                .onFailure().transform(e -> Status.INTERNAL.withDescription(e.getMessage()).asRuntimeException());
+                .onFailure().transform(GrpcErrorMapper::toStatusRuntimeException);
     }
 
     @Override
@@ -142,7 +141,7 @@ public class OrderCommandGrpcHandler extends MutinyOrderCommandServiceGrpc.Order
                         .setStatus(apiResp.status())
                         .setMessage(apiResp.message())
                         .build())
-                .onFailure().transform(e -> Status.INTERNAL.withDescription(e.getMessage()).asRuntimeException());
+                .onFailure().transform(GrpcErrorMapper::toStatusRuntimeException);
     }
 
     @Override
@@ -157,7 +156,7 @@ public class OrderCommandGrpcHandler extends MutinyOrderCommandServiceGrpc.Order
                     }
                     return builder.build();
                 })
-                .onFailure().transform(e -> Status.INTERNAL.withDescription(e.getMessage()).asRuntimeException());
+                .onFailure().transform(GrpcErrorMapper::toStatusRuntimeException);
     }
 
     private pb.order.Order.OrderResponse toProto(OrderResponse r) {

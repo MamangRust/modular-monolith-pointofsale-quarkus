@@ -41,6 +41,9 @@ public class Transaction extends BaseModel {
     @Column(nullable = false)
     private PaymentStatus status = PaymentStatus.PENDING;
 
+    @Column(name = "idempotency_key", length = 100)
+    private String idempotencyKey;
+
     public Long getTransactionId() {
         return this.id;
     }

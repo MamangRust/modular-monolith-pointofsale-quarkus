@@ -3,6 +3,7 @@ package com.sanedge.transaction.repository.statsbymerchant;
 import java.util.ArrayList;
 import java.util.List;
 
+import com.sanedge.transaction.domain.requests.FindTransactionMonthMerchantRange;
 import com.sanedge.transaction.entity.Transaction;
 import com.sanedge.transaction.entity.TransactionMonthlyAmountFailed;
 import com.sanedge.transaction.entity.TransactionMonthlyAmountSuccess;
@@ -17,8 +18,7 @@ import jakarta.enterprise.context.ApplicationScoped;
 @ApplicationScoped
 public class TransactionAmountByMerchantRepository implements PanacheRepository<Transaction> {
 
-    public Uni<List<TransactionMonthlyAmountSuccess>> findMonthlySuccessByMerchant(
-            Long merchantId, Integer year, Integer month, Integer prevYear, Integer prevMonth) {
+    public Uni<List<TransactionMonthlyAmountSuccess>> findMonthlySuccessByMerchant(FindTransactionMonthMerchantRange req) {
         String sql = """
             WITH monthly_data AS (
                 SELECT
@@ -47,7 +47,7 @@ public class TransactionAmountByMerchantRepository implements PanacheRepository<
                        CAST(total_amount AS BIGINT) AS totalAmount
                 FROM monthly_data
                 UNION ALL
-                SELECT CAST(:year AS VARCHAR),
+                SELECT CAST(CAST(:year AS INTEGER) AS VARCHAR),
                        TO_CHAR(make_date(:year, :month, 1), 'Mon'),
                        0, 0
                 WHERE NOT EXISTS (
@@ -55,7 +55,7 @@ public class TransactionAmountByMerchantRepository implements PanacheRepository<
                     WHERE year = :year AND month = :month
                 )
                 UNION ALL
-                SELECT CAST(:prevYear AS VARCHAR),
+                SELECT CAST(CAST(:prevYear AS INTEGER) AS VARCHAR),
                        TO_CHAR(make_date(:prevYear, :prevMonth, 1), 'Mon'),
                        0, 0
                 WHERE NOT EXISTS (
@@ -69,11 +69,11 @@ public class TransactionAmountByMerchantRepository implements PanacheRepository<
 
         return Panache.getSession()
                 .chain(session -> session.createNativeQuery(sql)
-                        .setParameter("merchantId", merchantId)
-                        .setParameter("year", year)
-                        .setParameter("month", month)
-                        .setParameter("prevYear", prevYear)
-                        .setParameter("prevMonth", prevMonth)
+                        .setParameter("merchantId", req.getMerchantId())
+                        .setParameter("year", req.getStartYear())
+                        .setParameter("month", req.getStartMonth())
+                        .setParameter("prevYear", req.getEndYear())
+                        .setParameter("prevMonth", req.getEndMonth())
                         .getResultList())
                 .map(rawList -> {
                     List<TransactionMonthlyAmountSuccess> list = new ArrayList<>();
@@ -110,7 +110,7 @@ public class TransactionAmountByMerchantRepository implements PanacheRepository<
             formatted_data AS (
                 SELECT CAST(year AS VARCHAR) AS year, CAST(total_success AS INTEGER) AS totalSuccess, CAST(total_amount AS BIGINT) AS totalAmount FROM yearly_data
                 UNION ALL
-                SELECT CAST(:year AS VARCHAR), 0, 0 WHERE NOT EXISTS (SELECT 1 FROM yearly_data WHERE year = :year)
+                SELECT CAST(CAST(:year AS INTEGER) AS VARCHAR), 0, 0 WHERE NOT EXISTS (SELECT 1 FROM yearly_data WHERE year = :year)
                 UNION ALL
                 SELECT CAST((:year - 1) AS VARCHAR), 0, 0 WHERE NOT EXISTS (SELECT 1 FROM yearly_data WHERE year = :year - 1)
             )
@@ -137,8 +137,7 @@ public class TransactionAmountByMerchantRepository implements PanacheRepository<
                 });
     }
 
-    public Uni<List<TransactionMonthlyAmountFailed>> findMonthlyFailedByMerchant(
-            Long merchantId, Integer year, Integer month, Integer prevYear, Integer prevMonth) {
+    public Uni<List<TransactionMonthlyAmountFailed>> findMonthlyFailedByMerchant(FindTransactionMonthMerchantRange req) {
         String sql = """
             WITH monthly_data AS (
                 SELECT
@@ -168,7 +167,7 @@ public class TransactionAmountByMerchantRepository implements PanacheRepository<
                     CAST(total_amount AS BIGINT) AS totalAmount
                 FROM monthly_data
                 UNION ALL
-                SELECT CAST(:year AS VARCHAR),
+                SELECT CAST(CAST(:year AS INTEGER) AS VARCHAR),
                        TO_CHAR(make_date(:year, :month, 1), 'Mon'),
                        0, 0
                 WHERE NOT EXISTS (
@@ -176,7 +175,7 @@ public class TransactionAmountByMerchantRepository implements PanacheRepository<
                     WHERE year = :year AND month = :month
                 )
                 UNION ALL
-                SELECT CAST(:prevYear AS VARCHAR),
+                SELECT CAST(CAST(:prevYear AS INTEGER) AS VARCHAR),
                        TO_CHAR(make_date(:prevYear, :prevMonth, 1), 'Mon'),
                        0, 0
                 WHERE NOT EXISTS (
@@ -190,11 +189,11 @@ public class TransactionAmountByMerchantRepository implements PanacheRepository<
 
         return Panache.getSession()
                 .chain(session -> session.createNativeQuery(sql)
-                        .setParameter("merchantId", merchantId)
-                        .setParameter("year", year)
-                        .setParameter("month", month)
-                        .setParameter("prevYear", prevYear)
-                        .setParameter("prevMonth", prevMonth)
+                        .setParameter("merchantId", req.getMerchantId())
+                        .setParameter("year", req.getStartYear())
+                        .setParameter("month", req.getStartMonth())
+                        .setParameter("prevYear", req.getEndYear())
+                        .setParameter("prevMonth", req.getEndMonth())
                         .getResultList())
                 .map(rawList -> {
                     List<TransactionMonthlyAmountFailed> list = new ArrayList<>();
@@ -235,7 +234,7 @@ public class TransactionAmountByMerchantRepository implements PanacheRepository<
                     CAST(total_amount AS BIGINT) AS totalAmount
                 FROM yearly_data
                 UNION ALL
-                SELECT CAST(:year AS VARCHAR), 0, 0 WHERE NOT EXISTS (SELECT 1 FROM yearly_data WHERE year = :year)
+                SELECT CAST(CAST(:year AS INTEGER) AS VARCHAR), 0, 0 WHERE NOT EXISTS (SELECT 1 FROM yearly_data WHERE year = :year)
                 UNION ALL
                 SELECT CAST((:year - 1) AS VARCHAR), 0, 0 WHERE NOT EXISTS (SELECT 1 FROM yearly_data WHERE year = :year - 1)
             )

@@ -33,4 +33,7 @@ public class UpdateTransactionRequest {
 
     @Schema(description = "Status pembayaran (opsional)", example = "PAID")
     private String paymentStatus;
+
+    @Schema(description = "Idempotency key klien (opsional)", example = "ord-100-cash-20260814")
+    private String idempotencyKey;
 }

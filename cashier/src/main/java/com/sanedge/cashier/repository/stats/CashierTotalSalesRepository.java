@@ -3,6 +3,7 @@ package com.sanedge.cashier.repository.stats;
 import java.util.ArrayList;
 import java.util.List;
 
+import com.sanedge.cashier.domain.requests.FindMonthTotalSalesRange;
 import com.sanedge.cashier.entity.Cashier;
 import com.sanedge.cashier.entity.CashierMonthTotalSales;
 import com.sanedge.cashier.entity.CashierYearTotalSales;
@@ -15,12 +16,12 @@ import jakarta.enterprise.context.ApplicationScoped;
 @ApplicationScoped
 public class CashierTotalSalesRepository implements PanacheRepository<Cashier> {
 
-    public Uni<List<CashierMonthTotalSales>> findMonthTotalSales(Integer startYear, Integer startMonth, Integer endYear, Integer endMonth) {
+    public Uni<List<CashierMonthTotalSales>> findMonthTotalSales(FindMonthTotalSalesRange req) {
         String sql = """
             WITH monthly_totals AS (
                 SELECT
-                    CAST(EXTRACT(YEAR FROM o.created_at) AS VARCHAR) AS year,
-                    CAST(EXTRACT(MONTH FROM o.created_at) AS INTEGER) AS month,
+                    EXTRACT(YEAR FROM o.created_at) AS year,
+                    EXTRACT(MONTH FROM o.created_at) AS month,
                     CAST(COALESCE(SUM(o.total_price), 0) AS BIGINT) AS total_sales
                 FROM orders o
                 JOIN cashiers c ON o.cashier_id = c.cashier_id
@@ -30,28 +31,28 @@ public class CashierTotalSalesRepository implements PanacheRepository<Cashier> {
                       (EXTRACT(YEAR FROM o.created_at) = :startYear AND EXTRACT(MONTH FROM o.created_at) = :startMonth)
                       OR (EXTRACT(YEAR FROM o.created_at) = :endYear AND EXTRACT(MONTH FROM o.created_at) = :endMonth)
                   )
-                GROUP BY CAST(EXTRACT(YEAR FROM o.created_at) AS VARCHAR), CAST(EXTRACT(MONTH FROM o.created_at) AS INTEGER)
+                GROUP BY EXTRACT(YEAR FROM o.created_at), EXTRACT(MONTH FROM o.created_at)
             ),
             all_months AS (
-                SELECT CAST(:startYear AS VARCHAR) AS year, CAST(:startMonth AS INTEGER) AS month
+                SELECT CAST(:startYear AS INTEGER) AS year, CAST(:startMonth AS INTEGER) AS month
                 UNION
-                SELECT CAST(:endYear AS VARCHAR) AS year, CAST(:endMonth AS INTEGER) AS month
+                SELECT CAST(:endYear AS INTEGER) AS year, CAST(:endMonth AS INTEGER) AS month
             )
             SELECT
-                am.year,
+                CAST(am.year AS VARCHAR) AS year,
                 TO_CHAR(TO_DATE(CAST(am.month AS VARCHAR), 'MM'), 'FMMonth') AS month,
                 CAST(COALESCE(mt.total_sales, 0) AS BIGINT) AS total_sales
             FROM all_months am
             LEFT JOIN monthly_totals mt ON am.year = mt.year AND am.month = mt.month
-            ORDER BY CAST(am.year AS INTEGER) DESC, am.month DESC
+            ORDER BY am.year DESC, am.month DESC
             """;
 
         return Panache.getSession()
                 .chain(session -> session.createNativeQuery(sql)
-                        .setParameter("startYear", startYear)
-                        .setParameter("startMonth", startMonth)
-                        .setParameter("endYear", endYear)
-                        .setParameter("endMonth", endMonth)
+                        .setParameter("startYear", req.getStartYear())
+                        .setParameter("startMonth", req.getStartMonth())
+                        .setParameter("endYear", req.getEndYear())
+                        .setParameter("endMonth", req.getEndMonth())
                         .getResultList())
                 .map(rawList -> {
                     List<CashierMonthTotalSales> list = new ArrayList<>();

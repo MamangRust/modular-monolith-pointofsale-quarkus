@@ -19,8 +19,8 @@ public class OrderSoldOutRepository implements PanacheRepository<Order> {
         String sql = """
             WITH date_range AS (
                 SELECT
-                    date_trunc('month', TO_TIMESTAMP(CAST(:yearMonth AS VARCHAR), 'YYYYMM')) AS start_date,
-                    date_trunc('month', TO_TIMESTAMP(CAST(:yearMonth AS VARCHAR), 'YYYYMM')) + INTERVAL '1' YEAR - INTERVAL '1' DAY AS end_date
+                    date_trunc('month', TO_TIMESTAMP(CAST(CAST(:yearMonth AS INTEGER) AS VARCHAR), 'YYYYMM')) AS start_date,
+                    date_trunc('month', TO_TIMESTAMP(CAST(CAST(:yearMonth AS INTEGER) AS VARCHAR), 'YYYYMM')) + INTERVAL '1' YEAR - INTERVAL '1' DAY AS end_date
             ),
             monthly_orders AS (
                 SELECT
@@ -78,8 +78,8 @@ public class OrderSoldOutRepository implements PanacheRepository<Order> {
                 JOIN order_items oi ON o.order_id = oi.order_id
                 WHERE o.deleted_at IS NULL
                   AND oi.deleted_at IS NULL
-                  AND EXTRACT(YEAR FROM o.created_at) BETWEEN EXTRACT(YEAR FROM TO_TIMESTAMP(CAST(:yearMonth AS VARCHAR), 'YYYYMM')) - 4
-                                                           AND EXTRACT(YEAR FROM TO_TIMESTAMP(CAST(:yearMonth AS VARCHAR), 'YYYYMM'))
+                  AND EXTRACT(YEAR FROM o.created_at) BETWEEN EXTRACT(YEAR FROM TO_TIMESTAMP(CAST(CAST(:yearMonth AS INTEGER) AS VARCHAR), 'YYYYMM')) - 4
+                                                           AND EXTRACT(YEAR FROM TO_TIMESTAMP(CAST(CAST(:yearMonth AS INTEGER) AS VARCHAR), 'YYYYMM'))
                 GROUP BY CAST(EXTRACT(YEAR FROM o.created_at) AS VARCHAR)
             )
             SELECT

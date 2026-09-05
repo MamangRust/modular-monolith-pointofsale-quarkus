@@ -3,6 +3,7 @@ package com.sanedge.transaction.repository.stats;
 import java.util.ArrayList;
 import java.util.List;
 
+import com.sanedge.transaction.domain.requests.FindTransactionMonthRange;
 import com.sanedge.transaction.entity.Transaction;
 import com.sanedge.transaction.entity.TransactionMonthlyAmountFailed;
 import com.sanedge.transaction.entity.TransactionMonthlyAmountSuccess;
@@ -17,8 +18,7 @@ import jakarta.enterprise.context.ApplicationScoped;
 @ApplicationScoped
 public class TransactionAmountStatusRepository implements PanacheRepository<Transaction> {
 
-    public Uni<List<TransactionMonthlyAmountSuccess>> findMonthlyTransactionSuccess(
-            Integer year, Integer month, Integer prevYear, Integer prevMonth) {
+    public Uni<List<TransactionMonthlyAmountSuccess>> findMonthlyTransactionSuccess(FindTransactionMonthRange req) {
         String sql = """
             WITH monthly_data AS (
                 SELECT
@@ -47,7 +47,7 @@ public class TransactionAmountStatusRepository implements PanacheRepository<Tran
                     CAST(total_amount AS BIGINT) AS totalAmount
                 FROM monthly_data
                 UNION ALL
-                SELECT CAST(:year AS VARCHAR),
+                SELECT CAST(CAST(:year AS INTEGER) AS VARCHAR),
                        TO_CHAR(make_date(:year, :month, 1), 'Mon'),
                        0, 0
                 WHERE NOT EXISTS (
@@ -55,7 +55,7 @@ public class TransactionAmountStatusRepository implements PanacheRepository<Tran
                     WHERE year = :year AND month = :month
                 )
                 UNION ALL
-                SELECT CAST(:prevYear AS VARCHAR),
+                SELECT CAST(CAST(:prevYear AS INTEGER) AS VARCHAR),
                        TO_CHAR(make_date(:prevYear, :prevMonth, 1), 'Mon'),
                        0, 0
                 WHERE NOT EXISTS (
@@ -69,10 +69,10 @@ public class TransactionAmountStatusRepository implements PanacheRepository<Tran
 
         return Panache.getSession()
                 .chain(session -> session.createNativeQuery(sql)
-                        .setParameter("year", year)
-                        .setParameter("month", month)
-                        .setParameter("prevYear", prevYear)
-                        .setParameter("prevMonth", prevMonth)
+                        .setParameter("year", req.getStartYear())
+                        .setParameter("month", req.getStartMonth())
+                        .setParameter("prevYear", req.getEndYear())
+                        .setParameter("prevMonth", req.getEndMonth())
                         .getResultList())
                 .map(rawList -> {
                     List<TransactionMonthlyAmountSuccess> list = new ArrayList<>();
@@ -111,7 +111,7 @@ public class TransactionAmountStatusRepository implements PanacheRepository<Tran
                     CAST(total_amount AS BIGINT) AS totalAmount
                 FROM yearly_data
                 UNION ALL
-                SELECT CAST(:year AS VARCHAR), 0, 0 WHERE NOT EXISTS (SELECT 1 FROM yearly_data WHERE year = :year)
+                SELECT CAST(CAST(:year AS INTEGER) AS VARCHAR), 0, 0 WHERE NOT EXISTS (SELECT 1 FROM yearly_data WHERE year = :year)
                 UNION ALL
                 SELECT CAST((:year - 1) AS VARCHAR), 0, 0 WHERE NOT EXISTS (SELECT 1 FROM yearly_data WHERE year = :year - 1)
             )
@@ -137,8 +137,7 @@ public class TransactionAmountStatusRepository implements PanacheRepository<Tran
                 });
     }
 
-    public Uni<List<TransactionMonthlyAmountFailed>> findMonthlyTransactionFailed(
-            Integer year, Integer month, Integer prevYear, Integer prevMonth) {
+    public Uni<List<TransactionMonthlyAmountFailed>> findMonthlyTransactionFailed(FindTransactionMonthRange req) {
         String sql = """
             WITH monthly_data AS (
                 SELECT
@@ -167,7 +166,7 @@ public class TransactionAmountStatusRepository implements PanacheRepository<Tran
                     CAST(total_amount AS BIGINT) AS totalAmount
                 FROM monthly_data
                 UNION ALL
-                SELECT CAST(:year AS VARCHAR),
+                SELECT CAST(CAST(:year AS INTEGER) AS VARCHAR),
                        TO_CHAR(make_date(:year, :month, 1), 'Mon'),
                        0, 0
                 WHERE NOT EXISTS (
@@ -175,7 +174,7 @@ public class TransactionAmountStatusRepository implements PanacheRepository<Tran
                     WHERE year = :year AND month = :month
                 )
                 UNION ALL
-                SELECT CAST(:prevYear AS VARCHAR),
+                SELECT CAST(CAST(:prevYear AS INTEGER) AS VARCHAR),
                        TO_CHAR(make_date(:prevYear, :prevMonth, 1), 'Mon'),
                        0, 0
                 WHERE NOT EXISTS (
@@ -189,10 +188,10 @@ public class TransactionAmountStatusRepository implements PanacheRepository<Tran
 
         return Panache.getSession()
                 .chain(session -> session.createNativeQuery(sql)
-                        .setParameter("year", year)
-                        .setParameter("month", month)
-                        .setParameter("prevYear", prevYear)
-                        .setParameter("prevMonth", prevMonth)
+                        .setParameter("year", req.getStartYear())
+                        .setParameter("month", req.getStartMonth())
+                        .setParameter("prevYear", req.getEndYear())
+                        .setParameter("prevMonth", req.getEndMonth())
                         .getResultList())
                 .map(rawList -> {
                     List<TransactionMonthlyAmountFailed> list = new ArrayList<>();
@@ -231,7 +230,7 @@ public class TransactionAmountStatusRepository implements PanacheRepository<Tran
                     CAST(total_amount AS BIGINT) AS totalAmount
                 FROM yearly_data
                 UNION ALL
-                SELECT CAST(:year AS VARCHAR), 0, 0 WHERE NOT EXISTS (SELECT 1 FROM yearly_data WHERE year = :year)
+                SELECT CAST(CAST(:year AS INTEGER) AS VARCHAR), 0, 0 WHERE NOT EXISTS (SELECT 1 FROM yearly_data WHERE year = :year)
                 UNION ALL
                 SELECT CAST((:year - 1) AS VARCHAR), 0, 0 WHERE NOT EXISTS (SELECT 1 FROM yearly_data WHERE year = :year - 1)
             )

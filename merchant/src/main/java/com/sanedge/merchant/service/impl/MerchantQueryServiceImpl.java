@@ -1,7 +1,9 @@
 package com.sanedge.merchant.service.impl;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.function.Function;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
@@ -11,27 +13,20 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sanedge.common.config.RedisService;
-import com.sanedge.merchant.domain.requests.FindAllMerchants;
 import com.sanedge.common.domain.response.ApiResponse;
 import com.sanedge.common.domain.response.ApiResponsePagination;
 import com.sanedge.common.domain.response.PagedResult;
 import com.sanedge.common.domain.response.PaginationMeta;
+import com.sanedge.common.observability.TracingMetrics;
+import com.sanedge.merchant.domain.requests.FindAllMerchants;
 import com.sanedge.merchant.domain.response.MerchantResponse;
 import com.sanedge.merchant.domain.response.MerchantResponseDeleteAt;
 import com.sanedge.merchant.repository.MerchantQueryRepository;
 import com.sanedge.merchant.service.MerchantQueryService;
 
-import io.opentelemetry.api.OpenTelemetry;
-import io.opentelemetry.api.common.AttributeKey;
 import io.opentelemetry.api.common.Attributes;
-import io.opentelemetry.api.metrics.DoubleHistogram;
-import io.opentelemetry.api.metrics.LongCounter;
-import io.opentelemetry.api.metrics.Meter;
-import io.opentelemetry.api.trace.Span;
-import io.opentelemetry.api.trace.SpanKind;
-import io.opentelemetry.api.trace.StatusCode;
-import io.opentelemetry.api.trace.Tracer;
 import io.smallrye.mutiny.Uni;
+import io.quarkus.hibernate.reactive.panache.common.WithTransaction;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.NotFoundException;
@@ -43,31 +38,19 @@ public class MerchantQueryServiceImpl implements MerchantQueryService {
         private final MerchantQueryRepository merchantQueryRepository;
         private final RedisService redisService;
         private final ObjectMapper objectMapper;
-
-        private final Tracer tracer;
-        private final LongCounter requestsTotal;
-        private final DoubleHistogram requestDurationSeconds;
+        private final TracingMetrics tracingMetrics;
 
         private static final long LIST_CACHE_TTL_SECONDS = 300;
 
         @Inject
         public MerchantQueryServiceImpl(MerchantQueryRepository merchantQueryRepository,
-                        OpenTelemetry openTelemetry,
                         RedisService redisService,
-                        ObjectMapper objectMapper) {
+                        ObjectMapper objectMapper,
+                        TracingMetrics tracingMetrics) {
                 this.merchantQueryRepository = merchantQueryRepository;
                 this.redisService = redisService;
                 this.objectMapper = objectMapper;
-                this.tracer = openTelemetry.getTracer("merchant-query-service", "1.0.0");
-                Meter meter = openTelemetry.getMeter("merchant-query-service");
-
-                this.requestsTotal = meter.counterBuilder("requests_total")
-                                .setDescription("Total number of requests")
-                                .build();
-                this.requestDurationSeconds = meter.histogramBuilder("request_duration_seconds")
-                                .setDescription("Request duration in seconds")
-                                .setUnit("s")
-                                .build();
+                this.tracingMetrics = tracingMetrics;
         }
 
         private String toJson(Object obj) {
@@ -98,213 +81,168 @@ public class MerchantQueryServiceImpl implements MerchantQueryService {
         }
 
         @Override
+        @WithTransaction
         public Uni<ApiResponsePagination<List<MerchantResponse>>> findAll(FindAllMerchants req) {
                 String cacheKey = String.format("merchants:all:%d:%d:%s", req.getPage(), req.getPageSize(),
-                                req.getSearch());
+                                req.getSearch() != null ? req.getSearch() : "");
 
                 return redisService.getReactive(cacheKey)
                                 .chain(cachedJson -> {
                                         if (cachedJson != null) {
                                                 logger.info("Cache HIT for key: {}", cacheKey);
-                                                ApiResponsePagination<List<MerchantResponse>> response = fromJson(cachedJson,
+                                                ApiResponsePagination<List<MerchantResponse>> response = fromJson(
+                                                                cachedJson,
                                                                 new TypeReference<ApiResponsePagination<List<MerchantResponse>>>() {
                                                                 });
                                                 return Uni.createFrom().item(response);
                                         }
 
                                         logger.info("Cache MISS for key: {}. Fetching from DB.", cacheKey);
-                                        long startTime = System.currentTimeMillis();
-                                        Span span = tracer.spanBuilder("findAllMerchants")
-                                                        .setSpanKind(SpanKind.SERVER)
-                                                        .setAttribute("service.name", "merchant-query-service")
-                                                        .setAttribute("operation", "find_all_merchants")
-                                                        .startSpan();
+                                        return runTraced("findAllMerchants", "find_all_merchants", Attributes.empty(),
+                                                        () -> merchantQueryRepository.findMerchants(req)
+                                                                        .chain(pagedResult -> {
+                                                                                ApiResponsePagination<List<MerchantResponse>> response = buildPaginatedResponse(
+                                                                                                pagedResult,
+                                                                                                req,
+                                                                                                "Merchants retrieved successfully",
+                                                                                                MerchantResponse::from);
 
-                                        int page = req.getPage() > 0 ? req.getPage() - 1 : 0;
-                                        int size = req.getPageSize() > 0 ? req.getPageSize() : 10;
-                                        String search = (req.getSearch() != null && !req.getSearch().isEmpty()) ? req.getSearch() : null;
-
-                                        return merchantQueryRepository.findMerchants(search, page, size)
-                                                        .chain(pagedResult -> {
-                                                                span.setAttribute("merchant.count", pagedResult.getTotalRecords());
-                                                                span.setAttribute("merchant.page", req.getPage());
-                                                                span.setAttribute("merchant.size", req.getPageSize());
-
-                                                                ApiResponsePagination<List<MerchantResponse>> response = buildPaginatedResponse(
-                                                                                pagedResult, req, "Merchants retrieved successfully",
-                                                                                MerchantResponse::from);
-
-                                                                return redisService.setWithExpirationReactive(cacheKey, toJson(response), LIST_CACHE_TTL_SECONDS)
-                                                                                .map(v -> {
-                                                                                        logger.info("Cached response for key: {}", cacheKey);
-                                                                                        logger.info("Successfully retrieved {} merchants", pagedResult.getTotalRecords());
-                                                                                        span.setStatus(StatusCode.OK);
-
-                                                                                        requestsTotal.add(1, Attributes.of(
-                                                                                                        AttributeKey.stringKey("operation"), "find_all_merchants",
-                                                                                                        AttributeKey.stringKey("status"), "success"));
-                                                                                        return response;
-                                                                                });
-                                                        })
-                                                        .onFailure().invoke(e -> {
-                                                                logger.error("Error finding all merchants", e);
-                                                                span.recordException(e);
-                                                                span.setStatus(StatusCode.ERROR, e.getMessage());
-
-                                                                requestsTotal.add(1, Attributes.of(
-                                                                                AttributeKey.stringKey("operation"), "find_all_merchants",
-                                                                                AttributeKey.stringKey("status"), "failed",
-                                                                                AttributeKey.stringKey("error_type"), e.getClass().getSimpleName()));
-                                                        })
-                                                        .eventually(() -> {
-                                                                span.end();
-                                                                double duration = (System.currentTimeMillis() - startTime) / 1000.0;
-                                                                requestDurationSeconds.record(duration, Attributes.of(
-                                                                                AttributeKey.stringKey("operation"), "find_all_merchants"));
-                                                                logger.debug("Find all merchants operation completed in {} seconds", duration);
-                                                        });
+                                                                                return redisService
+                                                                                                .setWithExpirationReactive(
+                                                                                                                cacheKey,
+                                                                                                                toJson(response),
+                                                                                                                LIST_CACHE_TTL_SECONDS)
+                                                                                                .map(v -> {
+                                                                                                        logger.info("Cached response for key: {}",
+                                                                                                                        cacheKey);
+                                                                                                        logger.info("Successfully retrieved {} merchants",
+                                                                                                                        pagedResult.getTotalRecords());
+                                                                                                        return response;
+                                                                                                });
+                                                                        })
+                                                                        .onFailure().recoverWithItem(e -> {
+                                                                                logger.error("Failed to fetch merchants: {}",
+                                                                                                e.getMessage(),
+                                                                                                e);
+                                                                                return new ApiResponsePagination<>(
+                                                                                                "error",
+                                                                                                "Failed to fetch merchants",
+                                                                                                Collections.emptyList(),
+                                                                                                null);
+                                                                        }));
                                 });
         }
 
         @Override
+        @WithTransaction
         public Uni<ApiResponsePagination<List<MerchantResponseDeleteAt>>> findByActive(FindAllMerchants req) {
                 String cacheKey = String.format("merchants:active:%d:%d:%s", req.getPage(), req.getPageSize(),
-                                req.getSearch());
+                                req.getSearch() != null ? req.getSearch() : "");
 
                 return redisService.getReactive(cacheKey)
                                 .chain(cachedJson -> {
                                         if (cachedJson != null) {
                                                 logger.info("Cache HIT for key: {}", cacheKey);
-                                                ApiResponsePagination<List<MerchantResponseDeleteAt>> response = fromJson(cachedJson,
+                                                ApiResponsePagination<List<MerchantResponseDeleteAt>> response = fromJson(
+                                                                cachedJson,
                                                                 new TypeReference<ApiResponsePagination<List<MerchantResponseDeleteAt>>>() {
                                                                 });
                                                 return Uni.createFrom().item(response);
                                         }
 
                                         logger.info("Cache MISS for key: {}. Fetching from DB.", cacheKey);
-                                        long startTime = System.currentTimeMillis();
-                                        Span span = tracer.spanBuilder("findActiveMerchants")
-                                                        .setSpanKind(SpanKind.SERVER)
-                                                        .setAttribute("service.name", "merchant-query-service")
-                                                        .setAttribute("operation", "find_active_merchants")
-                                                        .startSpan();
+                                        return runTraced("findActiveMerchants", "find_active_merchants",
+                                                        Attributes.empty(),
+                                                        () -> merchantQueryRepository.findActiveMerchants(req)
+                                                                        .chain(pagedResult -> {
+                                                                                ApiResponsePagination<List<MerchantResponseDeleteAt>> response = buildPaginatedResponse(
+                                                                                                pagedResult,
+                                                                                                req,
+                                                                                                "Active merchants retrieved successfully",
+                                                                                                MerchantResponseDeleteAt::from);
 
-                                        int page = req.getPage() > 0 ? req.getPage() - 1 : 0;
-                                        int size = req.getPageSize() > 0 ? req.getPageSize() : 10;
-                                        String search = (req.getSearch() != null && !req.getSearch().isEmpty()) ? req.getSearch() : null;
-
-                                        return merchantQueryRepository.findActiveMerchants(search, page, size)
-                                                        .chain(pagedResult -> {
-                                                                span.setAttribute("merchant.count", pagedResult.getTotalRecords());
-                                                                span.setAttribute("merchant.page", req.getPage());
-                                                                span.setAttribute("merchant.size", req.getPageSize());
-
-                                                                ApiResponsePagination<List<MerchantResponseDeleteAt>> response = buildPaginatedResponse(
-                                                                                pagedResult, req, "Active merchants retrieved successfully",
-                                                                                MerchantResponseDeleteAt::from);
-
-                                                                return redisService.setWithExpirationReactive(cacheKey, toJson(response), LIST_CACHE_TTL_SECONDS)
-                                                                                .map(v -> {
-                                                                                        logger.info("Cached response for key: {}", cacheKey);
-                                                                                        logger.info("Successfully retrieved {} active merchants", pagedResult.getTotalRecords());
-                                                                                        span.setStatus(StatusCode.OK);
-
-                                                                                        requestsTotal.add(1, Attributes.of(
-                                                                                                        AttributeKey.stringKey("operation"), "find_active_merchants",
-                                                                                                        AttributeKey.stringKey("status"), "success"));
-                                                                                        return response;
-                                                                                });
-                                                        })
-                                                        .onFailure().invoke(e -> {
-                                                                logger.error("Error finding active merchants", e);
-                                                                span.recordException(e);
-                                                                span.setStatus(StatusCode.ERROR, e.getMessage());
-
-                                                                requestsTotal.add(1, Attributes.of(
-                                                                                AttributeKey.stringKey("operation"), "find_active_merchants",
-                                                                                AttributeKey.stringKey("status"), "failed",
-                                                                                AttributeKey.stringKey("error_type"), e.getClass().getSimpleName()));
-                                                        })
-                                                        .eventually(() -> {
-                                                                span.end();
-                                                                double duration = (System.currentTimeMillis() - startTime) / 1000.0;
-                                                                requestDurationSeconds.record(duration, Attributes.of(
-                                                                                AttributeKey.stringKey("operation"), "find_active_merchants"));
-                                                                logger.debug("Find active merchants operation completed in {} seconds", duration);
-                                                        });
+                                                                                return redisService
+                                                                                                .setWithExpirationReactive(
+                                                                                                                cacheKey,
+                                                                                                                toJson(response),
+                                                                                                                LIST_CACHE_TTL_SECONDS)
+                                                                                                .map(v -> {
+                                                                                                        logger.info("Cached response for key: {}",
+                                                                                                                        cacheKey);
+                                                                                                        logger.info("Successfully retrieved {} active merchants",
+                                                                                                                        pagedResult.getTotalRecords());
+                                                                                                        return response;
+                                                                                                });
+                                                                        })
+                                                                        .onFailure().recoverWithItem(e -> {
+                                                                                logger.error("Failed to fetch active merchants: {}",
+                                                                                                e.getMessage(),
+                                                                                                e);
+                                                                                return new ApiResponsePagination<>(
+                                                                                                "error",
+                                                                                                "Failed to fetch active merchants",
+                                                                                                Collections.emptyList(),
+                                                                                                null);
+                                                                        }));
                                 });
         }
 
         @Override
+        @WithTransaction
         public Uni<ApiResponsePagination<List<MerchantResponseDeleteAt>>> findByTrashed(FindAllMerchants req) {
                 String cacheKey = String.format("merchants:trashed:%d:%d:%s", req.getPage(), req.getPageSize(),
-                                req.getSearch());
+                                req.getSearch() != null ? req.getSearch() : "");
 
                 return redisService.getReactive(cacheKey)
                                 .chain(cachedJson -> {
                                         if (cachedJson != null) {
                                                 logger.info("Cache HIT for key: {}", cacheKey);
-                                                ApiResponsePagination<List<MerchantResponseDeleteAt>> response = fromJson(cachedJson,
+                                                ApiResponsePagination<List<MerchantResponseDeleteAt>> response = fromJson(
+                                                                cachedJson,
                                                                 new TypeReference<ApiResponsePagination<List<MerchantResponseDeleteAt>>>() {
                                                                 });
                                                 return Uni.createFrom().item(response);
                                         }
 
                                         logger.info("Cache MISS for key: {}. Fetching from DB.", cacheKey);
-                                        long startTime = System.currentTimeMillis();
-                                        Span span = tracer.spanBuilder("findTrashedMerchants")
-                                                        .setSpanKind(SpanKind.SERVER)
-                                                        .setAttribute("service.name", "merchant-query-service")
-                                                        .setAttribute("operation", "find_trashed_merchants")
-                                                        .startSpan();
+                                        return runTraced("findTrashedMerchants", "find_trashed_merchants",
+                                                        Attributes.empty(),
+                                                        () -> merchantQueryRepository.findTrashedMerchants(req)
+                                                                        .chain(pagedResult -> {
+                                                                                ApiResponsePagination<List<MerchantResponseDeleteAt>> response = buildPaginatedResponse(
+                                                                                                pagedResult,
+                                                                                                req,
+                                                                                                "Trashed merchants retrieved successfully",
+                                                                                                MerchantResponseDeleteAt::from);
 
-                                        int page = req.getPage() > 0 ? req.getPage() - 1 : 0;
-                                        int size = req.getPageSize() > 0 ? req.getPageSize() : 10;
-                                        String search = (req.getSearch() != null && !req.getSearch().isEmpty()) ? req.getSearch() : null;
-
-                                        return merchantQueryRepository.findTrashedMerchants(search, page, size)
-                                                        .chain(pagedResult -> {
-                                                                span.setAttribute("merchant.count", pagedResult.getTotalRecords());
-                                                                span.setAttribute("merchant.page", req.getPage());
-                                                                span.setAttribute("merchant.size", req.getPageSize());
-
-                                                                ApiResponsePagination<List<MerchantResponseDeleteAt>> response = buildPaginatedResponse(
-                                                                                pagedResult, req, "Trashed merchants retrieved successfully",
-                                                                                MerchantResponseDeleteAt::from);
-
-                                                                return redisService.setWithExpirationReactive(cacheKey, toJson(response), LIST_CACHE_TTL_SECONDS)
-                                                                                .map(v -> {
-                                                                                        logger.info("Cached response for key: {}", cacheKey);
-                                                                                        logger.info("Successfully retrieved {} trashed merchants", pagedResult.getTotalRecords());
-                                                                                        span.setStatus(StatusCode.OK);
-
-                                                                                        requestsTotal.add(1, Attributes.of(
-                                                                                                        AttributeKey.stringKey("operation"), "find_trashed_merchants",
-                                                                                                        AttributeKey.stringKey("status"), "success"));
-                                                                                        return response;
-                                                                                });
-                                                        })
-                                                        .onFailure().invoke(e -> {
-                                                                logger.error("Error finding trashed merchants", e);
-                                                                span.recordException(e);
-                                                                span.setStatus(StatusCode.ERROR, e.getMessage());
-
-                                                                requestsTotal.add(1, Attributes.of(
-                                                                                AttributeKey.stringKey("operation"), "find_trashed_merchants",
-                                                                                AttributeKey.stringKey("status"), "failed",
-                                                                                AttributeKey.stringKey("error_type"), e.getClass().getSimpleName()));
-                                                        })
-                                                        .eventually(() -> {
-                                                                span.end();
-                                                                double duration = (System.currentTimeMillis() - startTime) / 1000.0;
-                                                                requestDurationSeconds.record(duration, Attributes.of(
-                                                                                AttributeKey.stringKey("operation"), "find_trashed_merchants"));
-                                                                logger.debug("Find trashed merchants operation completed in {} seconds", duration);
-                                                        });
+                                                                                return redisService
+                                                                                                .setWithExpirationReactive(
+                                                                                                                cacheKey,
+                                                                                                                toJson(response),
+                                                                                                                LIST_CACHE_TTL_SECONDS)
+                                                                                                .map(v -> {
+                                                                                                        logger.info("Cached response for key: {}",
+                                                                                                                        cacheKey);
+                                                                                                        logger.info("Successfully retrieved {} trashed merchants",
+                                                                                                                        pagedResult.getTotalRecords());
+                                                                                                        return response;
+                                                                                                });
+                                                                        })
+                                                                        .onFailure().recoverWithItem(e -> {
+                                                                                logger.error("Failed to fetch trashed merchants: {}",
+                                                                                                e.getMessage(),
+                                                                                                e);
+                                                                                return new ApiResponsePagination<>(
+                                                                                                "error",
+                                                                                                "Failed to fetch trashed merchants",
+                                                                                                Collections.emptyList(),
+                                                                                                null);
+                                                                        }));
                                 });
         }
 
         @Override
+        @WithTransaction
         public Uni<ApiResponse<MerchantResponse>> findById(Long merchantId) {
                 String cacheKey = "merchant:id:" + merchantId;
 
@@ -312,73 +250,59 @@ public class MerchantQueryServiceImpl implements MerchantQueryService {
                                 .chain(cachedJson -> {
                                         if (cachedJson != null) {
                                                 logger.info("Cache HIT for key: {}", cacheKey);
-                                                MerchantResponse cachedMerchant = fromJson(cachedJson, MerchantResponse.class);
-                                                return Uni.createFrom().item(ApiResponse.success("Merchant retrieved successfully", cachedMerchant));
+                                                MerchantResponse cachedMerchant = fromJson(cachedJson,
+                                                                MerchantResponse.class);
+                                                return Uni.createFrom().item(ApiResponse.success(
+                                                                "Merchant retrieved successfully", cachedMerchant));
                                         }
 
                                         logger.info("Cache MISS for key: {}. Fetching from DB.", cacheKey);
-                                        long startTime = System.currentTimeMillis();
-                                        Span span = tracer.spanBuilder("findMerchantById")
-                                                        .setSpanKind(SpanKind.SERVER)
-                                                        .setAttribute("service.name", "merchant-query-service")
-                                                        .setAttribute("operation", "find_merchant_by_id")
-                                                        .setAttribute("merchant.id", merchantId.toString())
-                                                        .startSpan();
+                                        Attributes attrs = Attributes.builder()
+                                                        .put("merchant.id", merchantId.toString())
+                                                        .build();
 
-                                        return merchantQueryRepository.findMerchantById(merchantId)
-                                                        .chain(merchant -> {
-                                                                if (merchant == null) {
-                                                                        logger.warn("Merchant not found with id: {}", merchantId);
-                                                                        span.setStatus(StatusCode.ERROR, "Merchant not found");
-                                                                        span.setAttribute("merchant.found", false);
+                                        return runTraced("findMerchantById", "find_merchant_by_id", attrs,
+                                                        () -> merchantQueryRepository.findMerchantById(merchantId)
+                                                                        .chain(merchant -> {
+                                                                                if (merchant == null) {
+                                                                                        logger.warn("Merchant not found with id: {}",
+                                                                                                        merchantId);
+                                                                                        throw new NotFoundException(
+                                                                                                        "Merchant not found with id: "
+                                                                                                                        + merchantId);
+                                                                                }
 
-                                                                        requestsTotal.add(1, Attributes.of(
-                                                                                        AttributeKey.stringKey("operation"), "find_merchant_by_id",
-                                                                                        AttributeKey.stringKey("status"), "failed",
-                                                                                        AttributeKey.stringKey("error_type"), "not_found"));
+                                                                                MerchantResponse merchantResponse = MerchantResponse
+                                                                                                .from(merchant);
 
-                                                                        throw new NotFoundException("Merchant not found with id: " + merchantId);
-                                                                }
-
-                                                                span.setAttribute("merchant.found", true);
-                                                                span.setAttribute("merchant.name", merchant.getName());
-
-                                                                MerchantResponse merchantResponse = MerchantResponse.from(merchant);
-
-                                                                return redisService.setReactive(cacheKey, toJson(merchantResponse))
-                                                                                .map(v -> {
-                                                                                        logger.info("Cached merchant for key: {}", cacheKey);
-                                                                                        logger.info("Successfully found merchant with id: {} and name: {}", merchantId, merchant.getName());
-                                                                                        span.setStatus(StatusCode.OK);
-
-                                                                                        requestsTotal.add(1, Attributes.of(
-                                                                                                        AttributeKey.stringKey("operation"), "find_merchant_by_id",
-                                                                                                        AttributeKey.stringKey("status"), "success"));
-
-                                                                                        return ApiResponse.success("Merchant retrieved successfully", merchantResponse);
-                                                                                });
-                                                        })
-                                                        .onFailure().invoke(e -> {
-                                                                logger.error("Error finding merchant by id: {}", merchantId, e);
-                                                                span.recordException(e);
-                                                                span.setStatus(StatusCode.ERROR, e.getMessage());
-
-                                                                requestsTotal.add(1, Attributes.of(
-                                                                                AttributeKey.stringKey("operation"), "find_merchant_by_id",
-                                                                                AttributeKey.stringKey("status"), "failed",
-                                                                                AttributeKey.stringKey("error_type"), e.getClass().getSimpleName()));
-                                                        })
-                                                        .eventually(() -> {
-                                                                span.end();
-                                                                double duration = (System.currentTimeMillis() - startTime) / 1000.0;
-                                                                requestDurationSeconds.record(duration, Attributes.of(
-                                                                                AttributeKey.stringKey("operation"), "find_merchant_by_id"));
-                                                                logger.debug("Find merchant by id operation completed in {} seconds", duration);
-                                                        });
+                                                                                return redisService.setReactive(
+                                                                                                cacheKey,
+                                                                                                toJson(merchantResponse))
+                                                                                                .map(v -> {
+                                                                                                        logger.info("Cached merchant for key: {}",
+                                                                                                                        cacheKey);
+                                                                                                        logger.info("Successfully found merchant with id: {} and name: {}",
+                                                                                                                        merchantId,
+                                                                                                                        merchant.getName());
+                                                                                                        return ApiResponse
+                                                                                                                        .success("Merchant retrieved successfully",
+                                                                                                                                        merchantResponse);
+                                                                                                });
+                                                                        })
+                                                                        .onFailure().recoverWithItem(e -> {
+                                                                                logger.error("Failed to fetch merchant by id={}: {}",
+                                                                                                merchantId,
+                                                                                                e.getMessage(), e);
+                                                                                return new ApiResponse<>("error",
+                                                                                                "Failed to fetch merchant: "
+                                                                                                                + e.getMessage(),
+                                                                                                (MerchantResponse) null);
+                                                                        }));
                                 });
         }
 
         @Override
+        @WithTransaction
         public Uni<ApiResponse<MerchantResponse>> findByApiKey(String apiKey) {
                 String cacheKey = "merchant:apikey:" + apiKey;
 
@@ -386,72 +310,56 @@ public class MerchantQueryServiceImpl implements MerchantQueryService {
                                 .chain(cachedJson -> {
                                         if (cachedJson != null) {
                                                 logger.info("Cache HIT for key: {}", cacheKey);
-                                                MerchantResponse cachedMerchant = fromJson(cachedJson, MerchantResponse.class);
-                                                return Uni.createFrom().item(ApiResponse.success("Merchant retrieved successfully", cachedMerchant));
+                                                MerchantResponse cachedMerchant = fromJson(cachedJson,
+                                                                MerchantResponse.class);
+                                                return Uni.createFrom().item(ApiResponse.success(
+                                                                "Merchant retrieved successfully", cachedMerchant));
                                         }
 
                                         logger.info("Cache MISS for key: {}. Fetching from DB.", cacheKey);
-                                        long startTime = System.currentTimeMillis();
-                                        Span span = tracer.spanBuilder("findMerchantByApiKey")
-                                                        .setSpanKind(SpanKind.SERVER)
-                                                        .setAttribute("service.name", "merchant-query-service")
-                                                        .setAttribute("operation", "find_merchant_by_api_key")
-                                                        .startSpan();
+                                        Attributes attrs = Attributes.builder()
+                                                        .put("merchant.api_key", apiKey)
+                                                        .build();
 
-                                        return merchantQueryRepository.findByApiKey(apiKey)
-                                                        .chain(merchant -> {
-                                                                if (merchant == null) {
-                                                                        logger.warn("Merchant not found with api key: {}", apiKey);
-                                                                        span.setStatus(StatusCode.ERROR, "Merchant not found");
-                                                                        span.setAttribute("merchant.found", false);
+                                        return runTraced("findMerchantByApiKey", "find_merchant_by_api_key", attrs,
+                                                        () -> merchantQueryRepository.findByApiKey(apiKey)
+                                                                        .chain(merchant -> {
+                                                                                if (merchant == null) {
+                                                                                        logger.warn("Merchant not found with api key: {}",
+                                                                                                        apiKey);
+                                                                                        throw new NotFoundException(
+                                                                                                        "Merchant not found with api key");
+                                                                                }
 
-                                                                        requestsTotal.add(1, Attributes.of(
-                                                                                        AttributeKey.stringKey("operation"), "find_merchant_by_api_key",
-                                                                                        AttributeKey.stringKey("status"), "failed",
-                                                                                        AttributeKey.stringKey("error_type"), "not_found"));
+                                                                                MerchantResponse merchantResponse = MerchantResponse
+                                                                                                .from(merchant);
 
-                                                                        throw new NotFoundException("Merchant not found with api key");
-                                                                }
-
-                                                                span.setAttribute("merchant.found", true);
-                                                                span.setAttribute("merchant.name", merchant.getName());
-
-                                                                MerchantResponse merchantResponse = MerchantResponse.from(merchant);
-
-                                                                return redisService.setReactive(cacheKey, toJson(merchantResponse))
-                                                                                .map(v -> {
-                                                                                        logger.info("Cached merchant for key: {}", cacheKey);
-                                                                                        logger.info("Successfully found merchant with api key and name: {}", merchant.getName());
-                                                                                        span.setStatus(StatusCode.OK);
-
-                                                                                        requestsTotal.add(1, Attributes.of(
-                                                                                                        AttributeKey.stringKey("operation"), "find_merchant_by_api_key",
-                                                                                                        AttributeKey.stringKey("status"), "success"));
-
-                                                                                        return ApiResponse.success("Merchant retrieved successfully", merchantResponse);
-                                                                                });
-                                                        })
-                                                        .onFailure().invoke(e -> {
-                                                                logger.error("Error finding merchant by api key", e);
-                                                                span.recordException(e);
-                                                                span.setStatus(StatusCode.ERROR, e.getMessage());
-
-                                                                requestsTotal.add(1, Attributes.of(
-                                                                                AttributeKey.stringKey("operation"), "find_merchant_by_api_key",
-                                                                                AttributeKey.stringKey("status"), "failed",
-                                                                                AttributeKey.stringKey("error_type"), e.getClass().getSimpleName()));
-                                                        })
-                                                        .eventually(() -> {
-                                                                span.end();
-                                                                double duration = (System.currentTimeMillis() - startTime) / 1000.0;
-                                                                requestDurationSeconds.record(duration, Attributes.of(
-                                                                                AttributeKey.stringKey("operation"), "find_merchant_by_api_key"));
-                                                                logger.debug("Find merchant by api key operation completed in {} seconds", duration);
-                                                        });
+                                                                                return redisService.setReactive(
+                                                                                                cacheKey,
+                                                                                                toJson(merchantResponse))
+                                                                                                .map(v -> {
+                                                                                                        logger.info("Cached merchant for key: {}",
+                                                                                                                        cacheKey);
+                                                                                                        logger.info("Successfully found merchant with api key and name: {}",
+                                                                                                                        merchant.getName());
+                                                                                                        return ApiResponse
+                                                                                                                        .success("Merchant retrieved successfully",
+                                                                                                                                        merchantResponse);
+                                                                                                });
+                                                                        })
+                                                                        .onFailure().recoverWithItem(e -> {
+                                                                                logger.error("Failed to fetch merchant by api key: {}",
+                                                                                                e.getMessage(), e);
+                                                                                return new ApiResponse<>("error",
+                                                                                                "Failed to fetch merchant: "
+                                                                                                                + e.getMessage(),
+                                                                                                (MerchantResponse) null);
+                                                                        }));
                                 });
         }
 
         @Override
+        @WithTransaction
         public Uni<ApiResponse<List<MerchantResponse>>> findByUserId(Long userId) {
                 String cacheKey = "merchant:user:" + userId;
 
@@ -459,57 +367,50 @@ public class MerchantQueryServiceImpl implements MerchantQueryService {
                                 .chain(cachedJson -> {
                                         if (cachedJson != null) {
                                                 logger.info("Cache HIT for key: {}", cacheKey);
-                                                List<MerchantResponse> cachedMerchants = fromJson(cachedJson, new TypeReference<List<MerchantResponse>>() {});
-                                                return Uni.createFrom().item(ApiResponse.success("Merchants retrieved successfully", cachedMerchants));
+                                                List<MerchantResponse> cachedMerchants = fromJson(cachedJson,
+                                                                new TypeReference<List<MerchantResponse>>() {
+                                                                });
+                                                return Uni.createFrom().item(ApiResponse.success(
+                                                                "Merchants retrieved successfully", cachedMerchants));
                                         }
 
                                         logger.info("Cache MISS for key: {}. Fetching from DB.", cacheKey);
-                                        long startTime = System.currentTimeMillis();
-                                        Span span = tracer.spanBuilder("findMerchantsByUserId")
-                                                        .setSpanKind(SpanKind.SERVER)
-                                                        .setAttribute("service.name", "merchant-query-service")
-                                                        .setAttribute("operation", "find_merchants_by_user_id")
-                                                        .setAttribute("user.id", userId.toString())
-                                                        .startSpan();
+                                        Attributes attrs = Attributes.builder()
+                                                        .put("user.id", userId.toString())
+                                                        .build();
 
-                                        return merchantQueryRepository.findByUserId(userId)
-                                                        .chain(merchants -> {
-                                                                List<MerchantResponse> responses = merchants.stream()
-                                                                                .map(MerchantResponse::from)
-                                                                                .collect(Collectors.toList());
+                                        return runTraced("findMerchantsByUserId", "find_merchants_by_user_id", attrs,
+                                                        () -> merchantQueryRepository.findByUserId(userId)
+                                                                        .chain(merchants -> {
+                                                                                List<MerchantResponse> responses = merchants
+                                                                                                .stream()
+                                                                                                .map(MerchantResponse::from)
+                                                                                                .collect(Collectors
+                                                                                                                .toList());
 
-                                                                span.setAttribute("merchants.count", responses.size());
-                                                                span.setStatus(StatusCode.OK);
-
-                                                                return redisService.setReactive(cacheKey, toJson(responses))
-                                                                                .map(v -> {
-                                                                                        logger.info("Cached merchants for key: {}", cacheKey);
-                                                                                        logger.info("Successfully found {} merchants for user id: {}", responses.size(), userId);
-
-                                                                                        requestsTotal.add(1, Attributes.of(
-                                                                                                        AttributeKey.stringKey("operation"), "find_merchants_by_user_id",
-                                                                                                        AttributeKey.stringKey("status"), "success"));
-
-                                                                                        return ApiResponse.success("Merchants retrieved successfully", responses);
-                                                                                });
-                                                        })
-                                                        .onFailure().invoke(e -> {
-                                                                logger.error("Error finding merchants by user id: {}", userId, e);
-                                                                span.recordException(e);
-                                                                span.setStatus(StatusCode.ERROR, e.getMessage());
-
-                                                                requestsTotal.add(1, Attributes.of(
-                                                                                AttributeKey.stringKey("operation"), "find_merchants_by_user_id",
-                                                                                AttributeKey.stringKey("status"), "failed",
-                                                                                AttributeKey.stringKey("error_type"), e.getClass().getSimpleName()));
-                                                        })
-                                                        .eventually(() -> {
-                                                                span.end();
-                                                                double duration = (System.currentTimeMillis() - startTime) / 1000.0;
-                                                                requestDurationSeconds.record(duration, Attributes.of(
-                                                                                AttributeKey.stringKey("operation"), "find_merchants_by_user_id"));
-                                                                logger.debug("Find merchants by user id operation completed in {} seconds", duration);
-                                                        });
+                                                                                return redisService.setReactive(
+                                                                                                cacheKey,
+                                                                                                toJson(responses))
+                                                                                                .map(v -> {
+                                                                                                        logger.info("Cached merchants for key: {}",
+                                                                                                                        cacheKey);
+                                                                                                        logger.info("Successfully found {} merchants for user id: {}",
+                                                                                                                        responses.size(),
+                                                                                                                        userId);
+                                                                                                        return ApiResponse
+                                                                                                                        .success("Merchants retrieved successfully",
+                                                                                                                                        responses);
+                                                                                                });
+                                                                        })
+                                                                        .onFailure().recoverWithItem(e -> {
+                                                                                logger.error("Failed to fetch merchants by user id={}: {}",
+                                                                                                userId, e.getMessage(),
+                                                                                                e);
+                                                                                return new ApiResponse<>("error",
+                                                                                                "Failed to fetch merchants: "
+                                                                                                                + e.getMessage(),
+                                                                                                Collections.emptyList());
+                                                                        }));
                                 });
         }
 
@@ -530,5 +431,10 @@ public class MerchantQueryServiceImpl implements MerchantQueryService {
                 PaginationMeta pagination = new PaginationMeta(request.getPage(), size, totalPages, totalRecords);
 
                 return new ApiResponsePagination<>("success", successMessage, data, pagination);
+        }
+
+        private <T> Uni<T> runTraced(String operationName, String method, Attributes attributes,
+                        Supplier<Uni<T>> supplier) {
+                return tracingMetrics.traceAndMeasure(operationName, method, attributes, supplier);
         }
 }

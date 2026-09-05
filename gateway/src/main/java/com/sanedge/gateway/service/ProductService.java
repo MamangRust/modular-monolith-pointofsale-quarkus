@@ -1,15 +1,18 @@
 package com.sanedge.gateway.service;
 
 import com.sanedge.gateway.dto.ProductDto;
+import com.sanedge.gateway.domain.requests.FindAllProductsRequest;
+import com.sanedge.gateway.domain.requests.FindProductsByMerchantRequest;
+import com.sanedge.gateway.domain.requests.FindProductsByCategoryRequest;
 import io.smallrye.mutiny.Uni;
 
 public interface ProductService {
-    Uni<ProductDto.ApiResponsePaginationProduct> findAll(int page, int size, String search);
-    Uni<ProductDto.ApiResponsePaginationProductDeleteAt> findByActive(int page, int size, String search);
-    Uni<ProductDto.ApiResponsePaginationProductDeleteAt> findByTrashed(int page, int size, String search);
+    Uni<ProductDto.ApiResponsePaginationProduct> findAll(FindAllProductsRequest request);
+    Uni<ProductDto.ApiResponsePaginationProductDeleteAt> findByActive(FindAllProductsRequest request);
+    Uni<ProductDto.ApiResponsePaginationProductDeleteAt> findByTrashed(FindAllProductsRequest request);
     Uni<ProductDto.ApiResponseProduct> findById(int id);
-    Uni<ProductDto.ApiResponsePaginationProduct> findByMerchant(int merchantId, String search, int categoryId, int minPrice, int maxPrice, int page, int size);
-    Uni<ProductDto.ApiResponsePaginationProduct> findByCategory(String categoryName, int page, int size, String search, int minPrice, int maxPrice);
+    Uni<ProductDto.ApiResponsePaginationProduct> findByMerchant(FindProductsByMerchantRequest request);
+    Uni<ProductDto.ApiResponsePaginationProduct> findByCategory(FindProductsByCategoryRequest request);
     Uni<ProductDto.ApiResponseProduct> create(ProductDto.CreateRequest body);
     Uni<ProductDto.ApiResponseProduct> update(int id, ProductDto.UpdateRequest body);
     Uni<ProductDto.ApiResponseProductDeleteAt> trashed(int id);

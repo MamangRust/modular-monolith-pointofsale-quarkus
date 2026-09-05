@@ -3,6 +3,7 @@ package com.sanedge.order.repository.stats;
 import java.util.ArrayList;
 import java.util.List;
 
+import com.sanedge.order.domain.requests.FindOrderMonthRange;
 import com.sanedge.order.entity.Order;
 import com.sanedge.order.entity.OrderMonthTotalRevenue;
 import com.sanedge.order.entity.OrderYearTotalRevenue;
@@ -15,7 +16,7 @@ import jakarta.enterprise.context.ApplicationScoped;
 @ApplicationScoped
 public class OrderTotalRevenueRepository implements PanacheRepository<Order> {
 
-    public Uni<List<OrderMonthTotalRevenue>> findMonthlyTotalRevenue(Integer year1, Integer month1, Integer year2, Integer month2) {
+    public Uni<List<OrderMonthTotalRevenue>> findMonthlyTotalRevenue(FindOrderMonthRange req) {
         String sql = """
             WITH monthly_revenue AS (
                 SELECT
@@ -33,9 +34,9 @@ public class OrderTotalRevenueRepository implements PanacheRepository<Order> {
                 GROUP BY CAST(EXTRACT(YEAR FROM o.created_at) AS INTEGER), CAST(EXTRACT(MONTH FROM o.created_at) AS INTEGER)
             ),
             all_months AS (
-                SELECT CAST(:year1 AS VARCHAR) AS year, CAST(:month1 AS INTEGER) AS month, TO_CHAR(TO_DATE(CAST(:month1 AS VARCHAR), 'MM'), 'FMMonth') AS month_name
+                SELECT CAST(CAST(:year1 AS INTEGER) AS VARCHAR) AS year, CAST(:month1 AS INTEGER) AS month, TO_CHAR(TO_DATE(CAST(CAST(:month1 AS INTEGER) AS VARCHAR), 'MM'), 'FMMonth') AS month_name
                 UNION
-                SELECT CAST(:year2 AS VARCHAR) AS year, CAST(:month2 AS INTEGER) AS month, TO_CHAR(TO_DATE(CAST(:month2 AS VARCHAR), 'MM'), 'FMMonth') AS month_name
+                SELECT CAST(CAST(:year2 AS INTEGER) AS VARCHAR) AS year, CAST(:month2 AS INTEGER) AS month, TO_CHAR(TO_DATE(CAST(CAST(:month2 AS INTEGER) AS VARCHAR), 'MM'), 'FMMonth') AS month_name
             )
             SELECT
                 am.year AS year,
@@ -49,10 +50,10 @@ public class OrderTotalRevenueRepository implements PanacheRepository<Order> {
 
         return Panache.getSession()
                 .chain(session -> session.createNativeQuery(sql)
-                        .setParameter("year1", year1)
-                        .setParameter("month1", month1)
-                        .setParameter("year2", year2)
-                        .setParameter("month2", month2)
+                        .setParameter("year1", req.getStartYear())
+                        .setParameter("month1", req.getStartMonth())
+                        .setParameter("year2", req.getEndYear())
+                        .setParameter("month2", req.getEndMonth())
                         .getResultList())
                 .map(rawList -> {
                     List<OrderMonthTotalRevenue> list = new ArrayList<>();
@@ -98,6 +99,72 @@ public class OrderTotalRevenueRepository implements PanacheRepository<Order> {
                 .chain(session -> session.createNativeQuery(sql)
                         .setParameter("year", year)
                         .getResultList())
+                .map(this::mapYearly);
+    }
+
+    /**
+     * Total revenue of a single order for a given year+month (Fase 15 / OT-5).
+     * Returns exactly one row (the requested month, zeroed when the order has
+     * no revenue in that month), matching the shape of the existing stats.
+     */
+    public Uni<List<OrderMonthTotalRevenue>> findMonthlyTotalRevenueById(Long orderId, Integer year, Integer month) {
+        String sql = """
+            SELECT
+                CAST(CAST(:year AS INTEGER) AS VARCHAR) AS year,
+                TO_CHAR(TO_DATE(CAST(CAST(:month AS INTEGER) AS VARCHAR), 'MM'), 'FMMonth') AS month,
+                COALESCE((
+                    SELECT CAST(SUM(o.total_price) AS INTEGER)
+                    FROM orders o
+                    WHERE o.order_id = :orderId
+                      AND o.deleted_at IS NULL
+                      AND EXTRACT(YEAR FROM o.created_at) = :year
+                      AND EXTRACT(MONTH FROM o.created_at) = :month
+                ), 0) AS totalRevenue
+            """;
+
+        return Panache.getSession()
+                .chain(session -> session.createNativeQuery(sql)
+                        .setParameter("orderId", orderId)
+                        .setParameter("year", year)
+                        .setParameter("month", month)
+                        .getResultList())
+                .map(rawList -> {
+                    List<OrderMonthTotalRevenue> list = new ArrayList<>();
+                    for (Object row : rawList) {
+                        Object[] columns = (Object[]) row;
+                        list.add(new OrderMonthTotalRevenue(
+                                columns[0] != null ? (String) columns[0] : null,
+                                columns[1] != null ? (String) columns[1] : null,
+                                columns[2] != null ? ((Number) columns[2]).intValue() : null
+                        ));
+                    }
+                    return list;
+                });
+    }
+
+    /**
+     * Total revenue of a single order for a given year (Fase 15 / OT-5).
+     * Returns exactly one row (the requested year, zeroed when the order has
+     * no revenue in that year).
+     */
+    public Uni<List<OrderYearTotalRevenue>> findYearlyTotalRevenueById(Long orderId, Integer year) {
+        String sql = """
+            SELECT
+                CAST(CAST(:year AS INTEGER) AS VARCHAR) AS year,
+                COALESCE((
+                    SELECT CAST(SUM(o.total_price) AS INTEGER)
+                    FROM orders o
+                    WHERE o.order_id = :orderId
+                      AND o.deleted_at IS NULL
+                      AND EXTRACT(YEAR FROM o.created_at) = :year
+                ), 0) AS totalRevenue
+            """;
+
+        return Panache.getSession()
+                .chain(session -> session.createNativeQuery(sql)
+                        .setParameter("orderId", orderId)
+                        .setParameter("year", year)
+                        .getResultList())
                 .map(rawList -> {
                     List<OrderYearTotalRevenue> list = new ArrayList<>();
                     for (Object row : rawList) {
@@ -109,5 +176,17 @@ public class OrderTotalRevenueRepository implements PanacheRepository<Order> {
                     }
                     return list;
                 });
+    }
+
+    private List<OrderYearTotalRevenue> mapYearly(List<?> rawList) {
+        List<OrderYearTotalRevenue> list = new ArrayList<>();
+        for (Object row : rawList) {
+            Object[] columns = (Object[]) row;
+            list.add(new OrderYearTotalRevenue(
+                    columns[0] != null ? (String) columns[0] : null,
+                    columns[1] != null ? ((Number) columns[1]).intValue() : null
+            ));
+        }
+        return list;
     }
 }

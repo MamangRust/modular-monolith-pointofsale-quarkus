@@ -2,7 +2,7 @@ package com.sanedge.product.handler;
 
 import com.sanedge.product.service.ProductCommandService;
 
-import io.grpc.Status;
+import com.sanedge.common.grpc.GrpcErrorMapper;
 import io.quarkus.grpc.GrpcService;
 import io.smallrye.mutiny.Uni;
 import jakarta.inject.Inject;
@@ -49,7 +49,7 @@ public class ProductCommandGrpcHandler extends MutinyProductCommandServiceGrpc.P
                     }
                     return builder.build();
                 })
-                .onFailure().transform(e -> Status.INTERNAL.withDescription(e.getMessage()).asRuntimeException());
+                .onFailure().transform(GrpcErrorMapper::toStatusRuntimeException);
     }
 
     @Override
@@ -79,7 +79,7 @@ public class ProductCommandGrpcHandler extends MutinyProductCommandServiceGrpc.P
                     }
                     return builder.build();
                 })
-                .onFailure().transform(e -> Status.INTERNAL.withDescription(e.getMessage()).asRuntimeException());
+                .onFailure().transform(GrpcErrorMapper::toStatusRuntimeException);
     }
 
     @Override
@@ -94,7 +94,7 @@ public class ProductCommandGrpcHandler extends MutinyProductCommandServiceGrpc.P
                     }
                     return builder.build();
                 })
-                .onFailure().transform(e -> Status.INTERNAL.withDescription(e.getMessage()).asRuntimeException());
+                .onFailure().transform(GrpcErrorMapper::toStatusRuntimeException);
     }
 
     @Override
@@ -109,7 +109,7 @@ public class ProductCommandGrpcHandler extends MutinyProductCommandServiceGrpc.P
                     }
                     return builder.build();
                 })
-                .onFailure().transform(e -> Status.INTERNAL.withDescription(e.getMessage()).asRuntimeException());
+                .onFailure().transform(GrpcErrorMapper::toStatusRuntimeException);
     }
 
     @Override
@@ -119,7 +119,7 @@ public class ProductCommandGrpcHandler extends MutinyProductCommandServiceGrpc.P
                         .setStatus(apiResp.status())
                         .setMessage(apiResp.message())
                         .build())
-                .onFailure().transform(e -> Status.INTERNAL.withDescription(e.getMessage()).asRuntimeException());
+                .onFailure().transform(GrpcErrorMapper::toStatusRuntimeException);
     }
 
     @Override
@@ -129,7 +129,7 @@ public class ProductCommandGrpcHandler extends MutinyProductCommandServiceGrpc.P
                         .setStatus(apiResp.status())
                         .setMessage(apiResp.message())
                         .build())
-                .onFailure().transform(e -> Status.INTERNAL.withDescription(e.getMessage()).asRuntimeException());
+                .onFailure().transform(GrpcErrorMapper::toStatusRuntimeException);
     }
 
     @Override
@@ -139,7 +139,7 @@ public class ProductCommandGrpcHandler extends MutinyProductCommandServiceGrpc.P
                         .setStatus(apiResp.status())
                         .setMessage(apiResp.message())
                         .build())
-                .onFailure().transform(e -> Status.INTERNAL.withDescription(e.getMessage()).asRuntimeException());
+                .onFailure().transform(GrpcErrorMapper::toStatusRuntimeException);
     }
 
     private pb.product.Product.ProductResponse toProto(com.sanedge.product.domain.response.ProductResponse r) {

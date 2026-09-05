@@ -6,10 +6,12 @@ import com.sanedge.common.domain.response.PagedResult;
 import com.sanedge.cashier.entity.Cashier;
 
 import io.quarkus.hibernate.reactive.panache.PanacheRepository;
+import io.quarkus.hibernate.reactive.panache.common.WithSession;
 import io.smallrye.mutiny.Uni;
 import jakarta.enterprise.context.ApplicationScoped;
 
 @ApplicationScoped
+@WithSession
 public class CashierQueryRepository implements PanacheRepository<Cashier> {
 
     public Uni<PagedResult<Cashier>> findAllCashiers(FindAllCashiers req) {
@@ -18,7 +20,7 @@ public class CashierQueryRepository implements PanacheRepository<Cashier> {
         String keyword = (req.getSearch() != null && !req.getSearch().trim().isEmpty()) ? req.getSearch().trim() : null;
 
         var query = """
-                    ?1 IS NULL OR LOWER(name) LIKE LOWER(CONCAT('%', ?1, '%'))
+                    CAST(?1 AS string) IS NULL OR LOWER(name) LIKE LOWER(CONCAT('%', ?1, '%'))
                     ORDER BY createdAt ASC
                 """;
 
@@ -38,8 +40,8 @@ public class CashierQueryRepository implements PanacheRepository<Cashier> {
 
         var query = """
                     deletedAt IS NULL
-                    AND (?1 IS NULL OR merchantId = ?1)
-                    AND (?2 IS NULL OR LOWER(name) LIKE LOWER(CONCAT('%', ?2, '%')))
+                    AND (CAST(?1 AS long) IS NULL OR merchantId = ?1)
+                    AND (CAST(?2 AS string) IS NULL OR LOWER(name) LIKE LOWER(CONCAT('%', ?2, '%')))
                     ORDER BY createdAt ASC
                 """;
 
@@ -58,7 +60,7 @@ public class CashierQueryRepository implements PanacheRepository<Cashier> {
 
         var query = """
                     deletedAt IS NULL
-                    AND (?1 IS NULL OR LOWER(name) LIKE LOWER(CONCAT('%', ?1, '%')))
+                    AND (CAST(?1 AS string) IS NULL OR LOWER(name) LIKE LOWER(CONCAT('%', ?1, '%')))
                     ORDER BY createdAt ASC
                 """;
 
@@ -77,7 +79,7 @@ public class CashierQueryRepository implements PanacheRepository<Cashier> {
 
         var query = """
                     deletedAt IS NOT NULL
-                    AND (?1 IS NULL OR LOWER(name) LIKE LOWER(CONCAT('%', ?1, '%')))
+                    AND (CAST(?1 AS string) IS NULL OR LOWER(name) LIKE LOWER(CONCAT('%', ?1, '%')))
                     ORDER BY deletedAt DESC
                 """;
 

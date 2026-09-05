@@ -1,6 +1,9 @@
 package com.sanedge.gateway.service.impl;
 
 import com.sanedge.gateway.dto.ProductDto;
+import com.sanedge.gateway.domain.requests.FindAllProductsRequest;
+import com.sanedge.gateway.domain.requests.FindProductsByMerchantRequest;
+import com.sanedge.gateway.domain.requests.FindProductsByCategoryRequest;
 import com.sanedge.gateway.service.ProductService;
 import com.sanedge.gateway.telemetry.TelemetryHelper;
 import io.quarkus.grpc.GrpcClient;
@@ -24,33 +27,33 @@ public class ProductServiceImpl implements ProductService {
     pb.product.MutinyProductCommandServiceGrpc.MutinyProductCommandServiceStub productCommandService;
 
     @Override
-    public Uni<ProductDto.ApiResponsePaginationProduct> findAll(int page, int size, String search) {
+    public Uni<ProductDto.ApiResponsePaginationProduct> findAll(FindAllProductsRequest request) {
         return telemetryHelper.traceAndMetric("product.findAll", () -> productQueryService.findAll(pb.product.Product.FindAllProductRequest.newBuilder()
-                .setPage(page)
-                .setPageSize(size)
-                .setSearch(search == null ? "" : search)
+                .setPage(request.getPage())
+                .setPageSize(request.getSize())
+                .setSearch(request.getSearch() == null ? "" : request.getSearch())
                 .build())
                 .map(ProductDto.ApiResponsePaginationProduct::from)
                 .onFailure().invoke(throwable -> LOG.error("Failed to find all products: " + throwable.getMessage(), throwable)));
     }
 
     @Override
-    public Uni<ProductDto.ApiResponsePaginationProductDeleteAt> findByActive(int page, int size, String search) {
+    public Uni<ProductDto.ApiResponsePaginationProductDeleteAt> findByActive(FindAllProductsRequest request) {
         return telemetryHelper.traceAndMetric("product.findByActive", () -> productQueryService.findByActive(pb.product.Product.FindAllProductRequest.newBuilder()
-                .setPage(page)
-                .setPageSize(size)
-                .setSearch(search == null ? "" : search)
+                .setPage(request.getPage())
+                .setPageSize(request.getSize())
+                .setSearch(request.getSearch() == null ? "" : request.getSearch())
                 .build())
                 .map(ProductDto.ApiResponsePaginationProductDeleteAt::from)
                 .onFailure().invoke(throwable -> LOG.error("Failed to find active products: " + throwable.getMessage(), throwable)));
     }
 
     @Override
-    public Uni<ProductDto.ApiResponsePaginationProductDeleteAt> findByTrashed(int page, int size, String search) {
+    public Uni<ProductDto.ApiResponsePaginationProductDeleteAt> findByTrashed(FindAllProductsRequest request) {
         return telemetryHelper.traceAndMetric("product.findByTrashed", () -> productQueryService.findByTrashed(pb.product.Product.FindAllProductRequest.newBuilder()
-                .setPage(page)
-                .setPageSize(size)
-                .setSearch(search == null ? "" : search)
+                .setPage(request.getPage())
+                .setPageSize(request.getSize())
+                .setSearch(request.getSearch() == null ? "" : request.getSearch())
                 .build())
                 .map(ProductDto.ApiResponsePaginationProductDeleteAt::from)
                 .onFailure().invoke(throwable -> LOG.error("Failed to find trashed products: " + throwable.getMessage(), throwable)));
@@ -66,32 +69,32 @@ public class ProductServiceImpl implements ProductService {
     }
 
     @Override
-    public Uni<ProductDto.ApiResponsePaginationProduct> findByMerchant(int merchantId, String search, int categoryId, int minPrice, int maxPrice, int page, int size) {
+    public Uni<ProductDto.ApiResponsePaginationProduct> findByMerchant(FindProductsByMerchantRequest request) {
         return telemetryHelper.traceAndMetric("product.findByMerchant", () -> productQueryService.findByMerchant(pb.product.Product.FindAllProductMerchantRequest.newBuilder()
-                .setMerchantId(merchantId)
-                .setSearch(search == null ? "" : search)
-                .setCategoryId(categoryId)
-                .setMinPrice(minPrice)
-                .setMaxPrice(maxPrice)
-                .setPage(page)
-                .setPageSize(size)
+                .setMerchantId(request.getMerchantId())
+                .setSearch(request.getSearch() == null ? "" : request.getSearch())
+                .setCategoryId(request.getCategoryId())
+                .setMinPrice(request.getMinPrice())
+                .setMaxPrice(request.getMaxPrice())
+                .setPage(request.getPage())
+                .setPageSize(request.getSize())
                 .build())
                 .map(ProductDto.ApiResponsePaginationProduct::from)
-                .onFailure().invoke(throwable -> LOG.error("Failed to find products by merchant " + merchantId + ": " + throwable.getMessage(), throwable)));
+                .onFailure().invoke(throwable -> LOG.error("Failed to find products by merchant " + request.getMerchantId() + ": " + throwable.getMessage(), throwable)));
     }
 
     @Override
-    public Uni<ProductDto.ApiResponsePaginationProduct> findByCategory(String categoryName, int page, int size, String search, int minPrice, int maxPrice) {
+    public Uni<ProductDto.ApiResponsePaginationProduct> findByCategory(FindProductsByCategoryRequest request) {
         return telemetryHelper.traceAndMetric("product.findByCategory", () -> productQueryService.findByCategory(pb.product.Product.FindAllProductCategoryRequest.newBuilder()
-                .setCategoryName(categoryName == null ? "" : categoryName)
-                .setPage(page)
-                .setPageSize(size)
-                .setSearch(search == null ? "" : search)
-                .setMinprice(minPrice)
-                .setMaxprice(maxPrice)
+                .setCategoryName(request.getCategoryName() == null ? "" : request.getCategoryName())
+                .setPage(request.getPage())
+                .setPageSize(request.getSize())
+                .setSearch(request.getSearch() == null ? "" : request.getSearch())
+                .setMinprice(request.getMinPrice())
+                .setMaxprice(request.getMaxPrice())
                 .build())
                 .map(ProductDto.ApiResponsePaginationProduct::from)
-                .onFailure().invoke(throwable -> LOG.error("Failed to find products by category " + categoryName + ": " + throwable.getMessage(), throwable)));
+                .onFailure().invoke(throwable -> LOG.error("Failed to find products by category " + request.getCategoryName() + ": " + throwable.getMessage(), throwable)));
     }
 
     @Override

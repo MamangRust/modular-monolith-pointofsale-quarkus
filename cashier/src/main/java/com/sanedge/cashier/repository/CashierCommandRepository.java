@@ -6,11 +6,13 @@ import java.time.LocalDateTime;
 import com.sanedge.cashier.entity.Cashier;
 
 import io.quarkus.hibernate.reactive.panache.PanacheRepository;
+import io.quarkus.hibernate.reactive.panache.common.WithSession;
 import io.quarkus.hibernate.reactive.panache.common.WithTransaction;
 import io.smallrye.mutiny.Uni;
 import jakarta.enterprise.context.ApplicationScoped;
 
 @ApplicationScoped
+@WithSession
 public class CashierCommandRepository implements PanacheRepository<Cashier> {
 
     @WithTransaction

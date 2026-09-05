@@ -4,7 +4,7 @@ import com.sanedge.cashier.domain.requests.FindAllCashierMerchant;
 import com.sanedge.cashier.domain.requests.FindAllCashiers;
 import com.sanedge.cashier.service.CashierQueryService;
 
-import io.grpc.Status;
+import com.sanedge.common.grpc.GrpcErrorMapper;
 import io.quarkus.grpc.GrpcService;
 import io.smallrye.mutiny.Uni;
 import jakarta.inject.Inject;
@@ -36,7 +36,7 @@ public class CashierQueryGrpcHandler extends MutinyCashierServiceGrpc.CashierSer
                     }
                     return builder.build();
                 })
-                .onFailure().transform(e -> Status.INTERNAL.withDescription(e.getMessage()).asRuntimeException());
+                .onFailure().transform(GrpcErrorMapper::toStatusRuntimeException);
     }
 
     @Override
@@ -66,7 +66,7 @@ public class CashierQueryGrpcHandler extends MutinyCashierServiceGrpc.CashierSer
                     }
                     return builder.build();
                 })
-                .onFailure().transform(e -> Status.INTERNAL.withDescription(e.getMessage()).asRuntimeException());
+                .onFailure().transform(GrpcErrorMapper::toStatusRuntimeException);
     }
 
     @Override
@@ -97,7 +97,7 @@ public class CashierQueryGrpcHandler extends MutinyCashierServiceGrpc.CashierSer
                     }
                     return builder.build();
                 })
-                .onFailure().transform(e -> Status.INTERNAL.withDescription(e.getMessage()).asRuntimeException());
+                .onFailure().transform(GrpcErrorMapper::toStatusRuntimeException);
     }
 
     @Override
@@ -128,7 +128,7 @@ public class CashierQueryGrpcHandler extends MutinyCashierServiceGrpc.CashierSer
                     }
                     return builder.build();
                 })
-                .onFailure().transform(e -> Status.INTERNAL.withDescription(e.getMessage()).asRuntimeException());
+                .onFailure().transform(GrpcErrorMapper::toStatusRuntimeException);
     }
 
     @Override
@@ -159,7 +159,7 @@ public class CashierQueryGrpcHandler extends MutinyCashierServiceGrpc.CashierSer
                     }
                     return builder.build();
                 })
-                .onFailure().transform(e -> Status.INTERNAL.withDescription(e.getMessage()).asRuntimeException());
+                .onFailure().transform(GrpcErrorMapper::toStatusRuntimeException);
     }
 
     private pb.cashier.Cashier.CashierResponse toProto(com.sanedge.cashier.domain.response.CashierResponse r) {

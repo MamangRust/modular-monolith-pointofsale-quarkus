@@ -7,7 +7,7 @@ import com.sanedge.order.domain.response.OrderYearlyResponse;
 import com.sanedge.order.service.stats.OrderSoldoutService;
 import com.sanedge.order.service.statsbymerchant.OrderSoldOutByMerchantService;
 
-import io.grpc.Status;
+import com.sanedge.common.grpc.GrpcErrorMapper;
 import io.quarkus.grpc.GrpcService;
 import io.smallrye.mutiny.Uni;
 import jakarta.inject.Inject;
@@ -42,7 +42,7 @@ public class OrderSoldoutGrpcHandler extends MutinyOrderSoldoutServiceGrpc.Order
                     }
                     return builder.build();
                 })
-                .onFailure().transform(e -> Status.INTERNAL.withDescription(e.getMessage()).asRuntimeException());
+                .onFailure().transform(GrpcErrorMapper::toStatusRuntimeException);
     }
 
     @Override
@@ -59,7 +59,7 @@ public class OrderSoldoutGrpcHandler extends MutinyOrderSoldoutServiceGrpc.Order
                     }
                     return builder.build();
                 })
-                .onFailure().transform(e -> Status.INTERNAL.withDescription(e.getMessage()).asRuntimeException());
+                .onFailure().transform(GrpcErrorMapper::toStatusRuntimeException);
     }
 
     @Override
@@ -80,7 +80,7 @@ public class OrderSoldoutGrpcHandler extends MutinyOrderSoldoutServiceGrpc.Order
                     }
                     return builder.build();
                 })
-                .onFailure().transform(e -> Status.INTERNAL.withDescription(e.getMessage()).asRuntimeException());
+                .onFailure().transform(GrpcErrorMapper::toStatusRuntimeException);
     }
 
     @Override
@@ -101,7 +101,7 @@ public class OrderSoldoutGrpcHandler extends MutinyOrderSoldoutServiceGrpc.Order
                     }
                     return builder.build();
                 })
-                .onFailure().transform(e -> Status.INTERNAL.withDescription(e.getMessage()).asRuntimeException());
+                .onFailure().transform(GrpcErrorMapper::toStatusRuntimeException);
     }
 
     private pb.order.Order.OrderMonthlyResponse toProto(OrderMonthlyResponse r) {

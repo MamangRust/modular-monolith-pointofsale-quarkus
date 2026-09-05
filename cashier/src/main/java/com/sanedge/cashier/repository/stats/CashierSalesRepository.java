@@ -3,6 +3,7 @@ package com.sanedge.cashier.repository.stats;
 import java.util.ArrayList;
 import java.util.List;
 
+import com.sanedge.cashier.domain.requests.FindCashierMonthSales;
 import com.sanedge.cashier.entity.Cashier;
 import com.sanedge.cashier.entity.CashierMonthSales;
 import com.sanedge.cashier.entity.CashierYearSales;
@@ -15,7 +16,7 @@ import jakarta.enterprise.context.ApplicationScoped;
 @ApplicationScoped
 public class CashierSalesRepository implements PanacheRepository<Cashier> {
 
-    public Uni<List<CashierMonthSales>> findMonthSales(Integer year, Integer startMonth, Integer endMonth) {
+    public Uni<List<CashierMonthSales>> findMonthSales(FindCashierMonthSales req) {
         String sql = """
             WITH date_range AS (
                 SELECT
@@ -52,9 +53,9 @@ public class CashierSalesRepository implements PanacheRepository<Cashier> {
 
         return Panache.getSession()
                 .chain(session -> session.createNativeQuery(sql)
-                        .setParameter("year", year)
-                        .setParameter("startMonth", startMonth)
-                        .setParameter("endMonth", endMonth)
+                        .setParameter("year", req.getYear())
+                        .setParameter("startMonth", req.getStartMonth())
+                        .setParameter("endMonth", req.getEndMonth())
                         .getResultList())
                 .map(rawList -> {
                     List<CashierMonthSales> list = new ArrayList<>();

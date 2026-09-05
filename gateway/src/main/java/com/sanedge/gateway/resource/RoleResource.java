@@ -3,6 +3,7 @@ package com.sanedge.gateway.resource;
 import org.eclipse.microprofile.openapi.annotations.Operation;
 import org.eclipse.microprofile.openapi.annotations.tags.Tag;
 
+import com.sanedge.gateway.domain.requests.FindAllRolesRequest;
 import com.sanedge.gateway.dto.RoleDto;
 import com.sanedge.gateway.service.RoleService;
 
@@ -39,7 +40,8 @@ public class RoleResource {
                         @QueryParam("page") @DefaultValue("1") int page,
                         @QueryParam("size") @DefaultValue("20") int size,
                         @QueryParam("search") String search) {
-                return roleService.listRoles(page, size, search)
+                FindAllRolesRequest request = new FindAllRolesRequest(search, page, size);
+                return roleService.listRoles(request)
                                 .map(res -> Response.ok(res).build());
         }
 
@@ -60,7 +62,8 @@ public class RoleResource {
                         @QueryParam("page") @DefaultValue("1") int page,
                         @QueryParam("size") @DefaultValue("20") int size,
                         @QueryParam("search") String search) {
-                return roleService.getActiveRoles(page, size, search)
+                FindAllRolesRequest request = new FindAllRolesRequest(search, page, size);
+                return roleService.getActiveRoles(request)
                                 .map(res -> Response.ok(res).build());
         }
 
@@ -72,7 +75,8 @@ public class RoleResource {
                         @QueryParam("page") @DefaultValue("1") int page,
                         @QueryParam("size") @DefaultValue("20") int size,
                         @QueryParam("search") String search) {
-                return roleService.getTrashedRoles(page, size, search)
+                FindAllRolesRequest request = new FindAllRolesRequest(search, page, size);
+                return roleService.getTrashedRoles(request)
                                 .map(res -> Response.ok(res).build());
         }
 

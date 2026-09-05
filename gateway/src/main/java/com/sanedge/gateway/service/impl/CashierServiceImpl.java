@@ -1,6 +1,10 @@
 package com.sanedge.gateway.service.impl;
 
 import com.sanedge.gateway.dto.CashierDto;
+import com.sanedge.gateway.domain.requests.FindAllCashiersRequest;
+import com.sanedge.gateway.domain.requests.FindCashiersByMerchantRequest;
+import com.sanedge.gateway.domain.requests.GetCashierMonthlyTotalSalesRequest;
+import com.sanedge.gateway.domain.requests.GetCashierMonthlyTotalSalesByMerchantRequest;
 import com.sanedge.gateway.service.CashierService;
 import com.sanedge.gateway.telemetry.TelemetryHelper;
 import io.quarkus.grpc.GrpcClient;
@@ -30,12 +34,12 @@ public class CashierServiceImpl implements CashierService {
     pb.cashier.stats.MutinyCashierSalesServiceGrpc.MutinyCashierSalesServiceStub cashierSalesServiceStub;
 
     @Override
-    public Uni<CashierDto.ApiResponsePaginationCashier> listCashiers(int page, int size, String search) {
+    public Uni<CashierDto.ApiResponsePaginationCashier> listCashiers(FindAllCashiersRequest request) {
         return telemetryHelper.traceAndMetric("cashier.listCashiers", () -> 
             cashierQueryService.findAll(pb.cashier.Cashier.FindAllCashierRequest.newBuilder()
-                    .setPage(page)
-                    .setPageSize(size)
-                    .setSearch(search == null ? "" : search)
+                    .setPage(request.getPage())
+                    .setPageSize(request.getSize())
+                    .setSearch(request.getSearch() == null ? "" : request.getSearch())
                     .build())
                     .map(CashierDto.ApiResponsePaginationCashier::from)
                     .onFailure().invoke(throwable -> LOG.error("Failed to list cashiers: " + throwable.getMessage(), throwable))
@@ -54,12 +58,12 @@ public class CashierServiceImpl implements CashierService {
     }
 
     @Override
-    public Uni<CashierDto.ApiResponsePaginationCashierDeleteAt> getActiveCashiers(int page, int size, String search) {
+    public Uni<CashierDto.ApiResponsePaginationCashierDeleteAt> getActiveCashiers(FindAllCashiersRequest request) {
         return telemetryHelper.traceAndMetric("cashier.getActiveCashiers", () -> 
             cashierQueryService.findByActive(pb.cashier.Cashier.FindAllCashierRequest.newBuilder()
-                    .setPage(page)
-                    .setPageSize(size)
-                    .setSearch(search == null ? "" : search)
+                    .setPage(request.getPage())
+                    .setPageSize(request.getSize())
+                    .setSearch(request.getSearch() == null ? "" : request.getSearch())
                     .build())
                     .map(CashierDto.ApiResponsePaginationCashierDeleteAt::from)
                     .onFailure().invoke(throwable -> LOG.error("Failed to list active cashiers: " + throwable.getMessage(), throwable))
@@ -67,12 +71,12 @@ public class CashierServiceImpl implements CashierService {
     }
 
     @Override
-    public Uni<CashierDto.ApiResponsePaginationCashierDeleteAt> getTrashedCashiers(int page, int size, String search) {
+    public Uni<CashierDto.ApiResponsePaginationCashierDeleteAt> getTrashedCashiers(FindAllCashiersRequest request) {
         return telemetryHelper.traceAndMetric("cashier.getTrashedCashiers", () -> 
             cashierQueryService.findByTrashed(pb.cashier.Cashier.FindAllCashierRequest.newBuilder()
-                    .setPage(page)
-                    .setPageSize(size)
-                    .setSearch(search == null ? "" : search)
+                    .setPage(request.getPage())
+                    .setPageSize(request.getSize())
+                    .setSearch(request.getSearch() == null ? "" : request.getSearch())
                     .build())
                     .map(CashierDto.ApiResponsePaginationCashierDeleteAt::from)
                     .onFailure().invoke(throwable -> LOG.error("Failed to list trashed cashiers: " + throwable.getMessage(), throwable))
@@ -80,16 +84,16 @@ public class CashierServiceImpl implements CashierService {
     }
 
     @Override
-    public Uni<CashierDto.ApiResponsePaginationCashier> getCashiersByMerchant(int merchantId, int page, int size, String search) {
+    public Uni<CashierDto.ApiResponsePaginationCashier> getCashiersByMerchant(FindCashiersByMerchantRequest request) {
         return telemetryHelper.traceAndMetric("cashier.getCashiersByMerchant", () -> 
             cashierQueryService.findByMerchant(pb.cashier.Cashier.FindByMerchantCashierRequest.newBuilder()
-                    .setMerchantId(merchantId)
-                    .setPage(page)
-                    .setPageSize(size)
-                    .setSearch(search == null ? "" : search)
+                    .setMerchantId(request.getMerchantId())
+                    .setPage(request.getPage())
+                    .setPageSize(request.getSize())
+                    .setSearch(request.getSearch() == null ? "" : request.getSearch())
                     .build())
                     .map(CashierDto.ApiResponsePaginationCashier::from)
-                    .onFailure().invoke(throwable -> LOG.error("Failed to get cashiers by merchant " + merchantId + ": " + throwable.getMessage(), throwable))
+                    .onFailure().invoke(throwable -> LOG.error("Failed to get cashiers by merchant " + request.getMerchantId() + ": " + throwable.getMessage(), throwable))
         );
     }
 
@@ -194,15 +198,15 @@ public class CashierServiceImpl implements CashierService {
     }
 
     @Override
-    public Uni<CashierDto.ApiResponseCashierMonthlyTotalSales> getMonthlyTotalSalesById(int cashierId, int year, int month) {
+    public Uni<CashierDto.ApiResponseCashierMonthlyTotalSales> getMonthlyTotalSalesById(GetCashierMonthlyTotalSalesRequest request) {
         return telemetryHelper.traceAndMetric("cashier.getMonthlyTotalSalesById", () -> 
             cashierTotalSalesServiceStub.findMonthlyTotalSalesById(pb.cashier.Cashier.FindYearMonthTotalSalesById.newBuilder()
-                    .setCashierId(cashierId)
-                    .setYear(year)
-                    .setMonth(month)
+                    .setCashierId(request.getCashierId())
+                    .setYear(request.getYear())
+                    .setMonth(request.getMonth())
                     .build())
                     .map(CashierDto.ApiResponseCashierMonthlyTotalSales::from)
-                    .onFailure().invoke(throwable -> LOG.error("Failed to get monthly total sales by cashier " + cashierId + ": " + throwable.getMessage(), throwable))
+                    .onFailure().invoke(throwable -> LOG.error("Failed to get monthly total sales by cashier " + request.getCashierId() + ": " + throwable.getMessage(), throwable))
         );
     }
 
@@ -219,15 +223,15 @@ public class CashierServiceImpl implements CashierService {
     }
 
     @Override
-    public Uni<CashierDto.ApiResponseCashierMonthlyTotalSales> getMonthlyTotalSalesByMerchant(int merchantId, int year, int month) {
+    public Uni<CashierDto.ApiResponseCashierMonthlyTotalSales> getMonthlyTotalSalesByMerchant(GetCashierMonthlyTotalSalesByMerchantRequest request) {
         return telemetryHelper.traceAndMetric("cashier.getMonthlyTotalSalesByMerchant", () -> 
             cashierTotalSalesServiceStub.findMonthlyTotalSalesByMerchant(pb.cashier.Cashier.FindYearMonthTotalSalesByMerchant.newBuilder()
-                    .setMerchantId(merchantId)
-                    .setYear(year)
-                    .setMonth(month)
+                    .setMerchantId(request.getMerchantId())
+                    .setYear(request.getYear())
+                    .setMonth(request.getMonth())
                     .build())
                     .map(CashierDto.ApiResponseCashierMonthlyTotalSales::from)
-                    .onFailure().invoke(throwable -> LOG.error("Failed to get monthly total sales by merchant " + merchantId + ": " + throwable.getMessage(), throwable))
+                    .onFailure().invoke(throwable -> LOG.error("Failed to get monthly total sales by merchant " + request.getMerchantId() + ": " + throwable.getMessage(), throwable))
         );
     }
 

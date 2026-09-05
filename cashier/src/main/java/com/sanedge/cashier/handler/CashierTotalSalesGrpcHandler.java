@@ -9,7 +9,7 @@ import com.sanedge.cashier.service.stats.CashierTotalSalesService;
 import com.sanedge.cashier.service.statsbyid.CashierTotalSalesByIdService;
 import com.sanedge.cashier.service.statsbymerchant.CashierTotalSalesByMerchantService;
 
-import io.grpc.Status;
+import com.sanedge.common.grpc.GrpcErrorMapper;
 import io.quarkus.grpc.GrpcService;
 import io.smallrye.mutiny.Uni;
 import jakarta.inject.Inject;
@@ -56,7 +56,7 @@ public class CashierTotalSalesGrpcHandler extends MutinyCashierTotalSalesService
                     }
                     return builder.build();
                 })
-                .onFailure().transform(e -> Status.INTERNAL.withDescription(e.getMessage()).asRuntimeException());
+                .onFailure().transform(GrpcErrorMapper::toStatusRuntimeException);
     }
 
     @Override
@@ -73,7 +73,7 @@ public class CashierTotalSalesGrpcHandler extends MutinyCashierTotalSalesService
                     }
                     return builder.build();
                 })
-                .onFailure().transform(e -> Status.INTERNAL.withDescription(e.getMessage()).asRuntimeException());
+                .onFailure().transform(GrpcErrorMapper::toStatusRuntimeException);
     }
 
     @Override
@@ -96,7 +96,7 @@ public class CashierTotalSalesGrpcHandler extends MutinyCashierTotalSalesService
                     }
                     return builder.build();
                 })
-                .onFailure().transform(e -> Status.INTERNAL.withDescription(e.getMessage()).asRuntimeException());
+                .onFailure().transform(GrpcErrorMapper::toStatusRuntimeException);
     }
 
     @Override
@@ -117,7 +117,7 @@ public class CashierTotalSalesGrpcHandler extends MutinyCashierTotalSalesService
                     }
                     return builder.build();
                 })
-                .onFailure().transform(e -> Status.INTERNAL.withDescription(e.getMessage()).asRuntimeException());
+                .onFailure().transform(GrpcErrorMapper::toStatusRuntimeException);
     }
 
     @Override
@@ -141,7 +141,7 @@ public class CashierTotalSalesGrpcHandler extends MutinyCashierTotalSalesService
                     }
                     return builder.build();
                 })
-                .onFailure().transform(e -> Status.INTERNAL.withDescription(e.getMessage()).asRuntimeException());
+                .onFailure().transform(GrpcErrorMapper::toStatusRuntimeException);
     }
 
     @Override
@@ -163,7 +163,7 @@ public class CashierTotalSalesGrpcHandler extends MutinyCashierTotalSalesService
                     }
                     return builder.build();
                 })
-                .onFailure().transform(e -> Status.INTERNAL.withDescription(e.getMessage()).asRuntimeException());
+                .onFailure().transform(GrpcErrorMapper::toStatusRuntimeException);
     }
 
     private pb.cashier.Cashier.CashierResponseMonthTotalSales toProtoMonthlyTotalSales(
@@ -172,6 +172,7 @@ public class CashierTotalSalesGrpcHandler extends MutinyCashierTotalSalesService
             return pb.cashier.Cashier.CashierResponseMonthTotalSales.getDefaultInstance();
         }
         return pb.cashier.Cashier.CashierResponseMonthTotalSales.newBuilder()
+                .setYear(r.getYear())
                 .setMonth(r.getMonth())
                 .setTotalSales(r.getTotalSales().intValue())
                 .build();

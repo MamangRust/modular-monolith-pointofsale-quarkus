@@ -2,6 +2,7 @@ package com.sanedge.order_item.handler;
 
 import java.util.stream.Collectors;
 
+import com.sanedge.order_item.domain.requests.FindAllOrderItems;
 import com.sanedge.order_item.service.OrderItemQueryService;
 
 import io.quarkus.grpc.GrpcService;
@@ -23,7 +24,12 @@ public class OrderItemQueryGrpcHandler extends MutinyOrderItemServiceGrpc.OrderI
 
     @Override
     public Uni<ApiResponsePaginationOrderItem> findAll(FindAllOrderItemRequest request) {
-        return orderItemQueryService.findAll(request.getSearch(), request.getPage(), request.getPageSize())
+        FindAllOrderItems req = new FindAllOrderItems();
+        req.setSearch(request.getSearch());
+        req.setPage(request.getPage());
+        req.setPageSize(request.getPageSize());
+
+        return orderItemQueryService.findAll(req)
                 .map(apiRes -> {
                     if ("success".equals(apiRes.status()) && apiRes.data() != null) {
                         var pagedData = apiRes.data();
@@ -63,7 +69,12 @@ public class OrderItemQueryGrpcHandler extends MutinyOrderItemServiceGrpc.OrderI
 
     @Override
     public Uni<ApiResponsePaginationOrderItemDeleteAt> findByActive(FindAllOrderItemRequest request) {
-        return orderItemQueryService.findByActive(request.getSearch(), request.getPage(), request.getPageSize())
+        FindAllOrderItems req = new FindAllOrderItems();
+        req.setSearch(request.getSearch());
+        req.setPage(request.getPage());
+        req.setPageSize(request.getPageSize());
+
+        return orderItemQueryService.findByActive(req)
                 .map(apiRes -> {
                     if ("success".equals(apiRes.status()) && apiRes.data() != null) {
                         var pagedData = apiRes.data();
@@ -103,7 +114,12 @@ public class OrderItemQueryGrpcHandler extends MutinyOrderItemServiceGrpc.OrderI
 
     @Override
     public Uni<ApiResponsePaginationOrderItemDeleteAt> findByTrashed(FindAllOrderItemRequest request) {
-        return orderItemQueryService.findByTrashed(request.getSearch(), request.getPage(), request.getPageSize())
+        FindAllOrderItems req = new FindAllOrderItems();
+        req.setSearch(request.getSearch());
+        req.setPage(request.getPage());
+        req.setPageSize(request.getPageSize());
+
+        return orderItemQueryService.findByTrashed(req)
                 .map(apiRes -> {
                     if ("success".equals(apiRes.status()) && apiRes.data() != null) {
                         var pagedData = apiRes.data();
@@ -143,7 +159,8 @@ public class OrderItemQueryGrpcHandler extends MutinyOrderItemServiceGrpc.OrderI
 
     @Override
     public Uni<ApiResponsesOrderItem> findOrderItemByOrder(FindByIdOrderItemRequest request) {
-        return orderItemQueryService.findOrderItemByOrder(request.getOrderItemId())
+        int orderId = request.getOrderId() > 0 ? request.getOrderId() : request.getOrderItemId();
+        return orderItemQueryService.findOrderItemByOrder(orderId)
                 .map(apiRes -> {
                     if ("success".equals(apiRes.status()) && apiRes.data() != null) {
                         var list = apiRes.data().stream()

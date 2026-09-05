@@ -5,6 +5,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 import com.sanedge.common.domain.response.PagedResult;
+import com.sanedge.role.domain.requests.FindAllRoles;
 import com.sanedge.role.entity.Role;
 
 import io.quarkus.hibernate.reactive.panache.PanacheRepository;
@@ -15,48 +16,54 @@ import jakarta.enterprise.context.ApplicationScoped;
 @ApplicationScoped
 public class RoleRepository implements PanacheRepository<Role> {
 
-    public Uni<PagedResult<Role>> findRoles(String keyword, int page, int size) {
+    public Uni<PagedResult<Role>> findRoles(FindAllRoles req) {
+        int pageIndex = req.getPage() > 0 ? req.getPage() - 1 : 0;
+        String keyword = (req.getSearch() != null && !req.getSearch().trim().isEmpty()) ? req.getSearch().trim() : null;
         var query = """
-                    (?1 IS NULL
+                    (CAST(?1 AS string) IS NULL
                      OR LOWER(roleName) LIKE LOWER(CONCAT('%', ?1, '%')))
                 """;
 
         var panacheQuery = find(query, keyword)
-                .page(page, size);
+                .page(pageIndex, req.getPageSize());
 
         return Uni.combine().all().unis(panacheQuery.list(), panacheQuery.count())
                 .asTuple()
                 .map(tuple -> new PagedResult<>(tuple.getItem1(), tuple.getItem2().intValue()));
     }
 
-    public Uni<PagedResult<Role>> findActiveRoles(String keyword, int page, int size) {
+    public Uni<PagedResult<Role>> findActiveRoles(FindAllRoles req) {
+        int pageIndex = req.getPage() > 0 ? req.getPage() - 1 : 0;
+        String keyword = (req.getSearch() != null && !req.getSearch().trim().isEmpty()) ? req.getSearch().trim() : null;
         var query = """
                     deletedAt IS NULL
                     AND (
-                        ?1 IS NULL
+                        CAST(?1 AS string) IS NULL
                         OR LOWER(roleName) LIKE LOWER(CONCAT('%', ?1, '%'))
                     )
                 """;
 
         var panacheQuery = find(query, keyword)
-                .page(page, size);
+                .page(pageIndex, req.getPageSize());
 
         return Uni.combine().all().unis(panacheQuery.list(), panacheQuery.count())
                 .asTuple()
                 .map(tuple -> new PagedResult<>(tuple.getItem1(), tuple.getItem2().intValue()));
     }
 
-    public Uni<PagedResult<Role>> findTrashedRoles(String keyword, int page, int size) {
+    public Uni<PagedResult<Role>> findTrashedRoles(FindAllRoles req) {
+        int pageIndex = req.getPage() > 0 ? req.getPage() - 1 : 0;
+        String keyword = (req.getSearch() != null && !req.getSearch().trim().isEmpty()) ? req.getSearch().trim() : null;
         var query = """
                     deletedAt IS NOT NULL
                     AND (
-                        ?1 IS NULL
+                        CAST(?1 AS string) IS NULL
                         OR LOWER(roleName) LIKE LOWER(CONCAT('%', ?1, '%'))
                     )
                 """;
 
         var panacheQuery = find(query, keyword)
-                .page(page, size);
+                .page(pageIndex, req.getPageSize());
 
         return Uni.combine().all().unis(panacheQuery.list(), panacheQuery.count())
                 .asTuple()

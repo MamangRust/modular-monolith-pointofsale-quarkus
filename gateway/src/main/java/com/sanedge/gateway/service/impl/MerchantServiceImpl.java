@@ -1,6 +1,7 @@
 package com.sanedge.gateway.service.impl;
 
 import com.sanedge.gateway.dto.MerchantDto;
+import com.sanedge.gateway.domain.requests.FindAllMerchantsRequest;
 import com.sanedge.gateway.service.MerchantService;
 import com.sanedge.gateway.telemetry.TelemetryHelper;
 import io.quarkus.grpc.GrpcClient;
@@ -24,12 +25,12 @@ public class MerchantServiceImpl implements MerchantService {
     pb.merchant.MutinyMerchantCommandServiceGrpc.MutinyMerchantCommandServiceStub merchantCommandService;
 
     @Override
-    public Uni<MerchantDto.ApiResponsePaginationMerchant> listMerchants(int page, int size, String search) {
+    public Uni<MerchantDto.ApiResponsePaginationMerchant> listMerchants(FindAllMerchantsRequest request) {
         return telemetryHelper.traceAndMetric("merchant.listMerchants", () -> 
             merchantQueryService.findAllMerchant(pb.merchant.Merchant.FindAllMerchantRequest.newBuilder()
-                    .setPage(page)
-                    .setPageSize(size)
-                    .setSearch(search == null ? "" : search)
+                    .setPage(request.getPage())
+                    .setPageSize(request.getSize())
+                    .setSearch(request.getSearch() == null ? "" : request.getSearch())
                     .build())
                     .map(MerchantDto.ApiResponsePaginationMerchant::from)
                     .onFailure().invoke(throwable -> LOG.error("Failed to list merchants: " + throwable.getMessage(), throwable))
@@ -48,12 +49,12 @@ public class MerchantServiceImpl implements MerchantService {
     }
 
     @Override
-    public Uni<MerchantDto.ApiResponsePaginationMerchantDeleteAt> getActiveMerchants(int page, int size, String search) {
+    public Uni<MerchantDto.ApiResponsePaginationMerchantDeleteAt> getActiveMerchants(FindAllMerchantsRequest request) {
         return telemetryHelper.traceAndMetric("merchant.getActiveMerchants", () -> 
             merchantQueryService.findByActive(pb.merchant.Merchant.FindAllMerchantRequest.newBuilder()
-                    .setPage(page)
-                    .setPageSize(size)
-                    .setSearch(search == null ? "" : search)
+                    .setPage(request.getPage())
+                    .setPageSize(request.getSize())
+                    .setSearch(request.getSearch() == null ? "" : request.getSearch())
                     .build())
                     .map(MerchantDto.ApiResponsePaginationMerchantDeleteAt::from)
                     .onFailure().invoke(throwable -> LOG.error("Failed to list active merchants: " + throwable.getMessage(), throwable))
@@ -61,12 +62,12 @@ public class MerchantServiceImpl implements MerchantService {
     }
 
     @Override
-    public Uni<MerchantDto.ApiResponsePaginationMerchantDeleteAt> getTrashedMerchants(int page, int size, String search) {
+    public Uni<MerchantDto.ApiResponsePaginationMerchantDeleteAt> getTrashedMerchants(FindAllMerchantsRequest request) {
         return telemetryHelper.traceAndMetric("merchant.getTrashedMerchants", () -> 
             merchantQueryService.findByTrashed(pb.merchant.Merchant.FindAllMerchantRequest.newBuilder()
-                    .setPage(page)
-                    .setPageSize(size)
-                    .setSearch(search == null ? "" : search)
+                    .setPage(request.getPage())
+                    .setPageSize(request.getSize())
+                    .setSearch(request.getSearch() == null ? "" : request.getSearch())
                     .build())
                     .map(MerchantDto.ApiResponsePaginationMerchantDeleteAt::from)
                     .onFailure().invoke(throwable -> LOG.error("Failed to list trashed merchants: " + throwable.getMessage(), throwable))

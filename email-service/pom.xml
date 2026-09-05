@@ -27,6 +27,24 @@
             <artifactId>quarkus-mailer</artifactId>
         </dependency>
 
+        <!-- Health checks (Phase 5): /q/health readiness -->
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-smallrye-health</artifactId>
+        </dependency>
+
+        <!-- Redis (email dedup guard) -->
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-redis-client</artifactId>
+            <exclusions>
+                <exclusion>
+                    <groupId>io.quarkus</groupId>
+                    <artifactId>quarkus-devservices</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+
         <!-- Vert.x & Vert.x Kafka Client -->
         <dependency>
             <groupId>io.quarkus</groupId>
@@ -47,6 +65,16 @@
         <dependency>
             <groupId>io.quarkus</groupId>
             <artifactId>quarkus-junit5</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-junit5-mockito</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.smallrye.reactive</groupId>
+            <artifactId>mutiny-test-utils</artifactId>
             <scope>test</scope>
         </dependency>
     </dependencies>

@@ -76,7 +76,7 @@ public class OrderItemRepository implements PanacheRepository<OrderItem> {
         String searchKeyword = (keyword != null && !keyword.trim().isEmpty()) ? keyword.trim() : null;
 
         var query = """
-                    ?1 IS NULL
+                    CAST(?1 AS string) IS NULL
                     OR CAST(id AS string) LIKE CONCAT('%', ?1, '%')
                     OR CAST(orderId AS string) LIKE CONCAT('%', ?1, '%')
                     OR CAST(productId AS string) LIKE CONCAT('%', ?1, '%')
@@ -97,7 +97,7 @@ public class OrderItemRepository implements PanacheRepository<OrderItem> {
 
         var query = """
                     deletedAt IS NULL
-                    AND (?1 IS NULL
+                    AND (CAST(?1 AS string) IS NULL
                         OR CAST(id AS string) LIKE CONCAT('%', ?1, '%')
                         OR CAST(orderId AS string) LIKE CONCAT('%', ?1, '%')
                         OR CAST(productId AS string) LIKE CONCAT('%', ?1, '%'))
@@ -118,7 +118,7 @@ public class OrderItemRepository implements PanacheRepository<OrderItem> {
 
         var query = """
                     deletedAt IS NOT NULL
-                    AND (?1 IS NULL
+                    AND (CAST(?1 AS string) IS NULL
                         OR CAST(id AS string) LIKE CONCAT('%', ?1, '%')
                         OR CAST(orderId AS string) LIKE CONCAT('%', ?1, '%')
                         OR CAST(productId AS string) LIKE CONCAT('%', ?1, '%'))

@@ -6,7 +6,7 @@ import com.sanedge.order.domain.response.OrderResponse;
 import com.sanedge.order.domain.response.OrderResponseDeleteAt;
 import com.sanedge.order.service.OrderQueryService;
 
-import io.grpc.Status;
+import com.sanedge.common.grpc.GrpcErrorMapper;
 import io.quarkus.grpc.GrpcService;
 import io.smallrye.mutiny.Uni;
 import jakarta.inject.Inject;
@@ -37,7 +37,7 @@ public class OrderQueryGrpcHandler extends MutinyOrderQueryServiceGrpc.OrderQuer
                     }
                     return builder.build();
                 })
-                .onFailure().transform(e -> Status.INTERNAL.withDescription(e.getMessage()).asRuntimeException());
+                .onFailure().transform(GrpcErrorMapper::toStatusRuntimeException);
     }
 
     @Override
@@ -67,7 +67,7 @@ public class OrderQueryGrpcHandler extends MutinyOrderQueryServiceGrpc.OrderQuer
                     }
                     return builder.build();
                 })
-                .onFailure().transform(e -> Status.INTERNAL.withDescription(e.getMessage()).asRuntimeException());
+                .onFailure().transform(GrpcErrorMapper::toStatusRuntimeException);
     }
 
     @Override
@@ -98,7 +98,7 @@ public class OrderQueryGrpcHandler extends MutinyOrderQueryServiceGrpc.OrderQuer
                     }
                     return builder.build();
                 })
-                .onFailure().transform(e -> Status.INTERNAL.withDescription(e.getMessage()).asRuntimeException());
+                .onFailure().transform(GrpcErrorMapper::toStatusRuntimeException);
     }
 
     @Override
@@ -128,7 +128,7 @@ public class OrderQueryGrpcHandler extends MutinyOrderQueryServiceGrpc.OrderQuer
                     }
                     return builder.build();
                 })
-                .onFailure().transform(e -> Status.INTERNAL.withDescription(e.getMessage()).asRuntimeException());
+                .onFailure().transform(GrpcErrorMapper::toStatusRuntimeException);
     }
 
     @Override
@@ -158,7 +158,7 @@ public class OrderQueryGrpcHandler extends MutinyOrderQueryServiceGrpc.OrderQuer
                     }
                     return builder.build();
                 })
-                .onFailure().transform(e -> Status.INTERNAL.withDescription(e.getMessage()).asRuntimeException());
+                .onFailure().transform(GrpcErrorMapper::toStatusRuntimeException);
     }
 
     private pb.order.Order.OrderResponse toProto(OrderResponse r) {

@@ -1,15 +1,19 @@
 package com.sanedge.gateway.service;
 
 import com.sanedge.gateway.dto.TransactionDto;
+import com.sanedge.gateway.domain.requests.FindAllTransactionsRequest;
+import com.sanedge.gateway.domain.requests.FindTransactionsByCardNumberRequest;
+import com.sanedge.gateway.domain.requests.GetTransactionStatusFailedByCardNumberRequest;
+import com.sanedge.gateway.domain.requests.GetTransactionStatusSuccessByCardNumberRequest;
 import io.smallrye.mutiny.Uni;
 
 public interface TransactionService {
-    Uni<TransactionDto.ApiResponsePaginationTransaction> listTransactions(int page, int size, String search);
-    Uni<TransactionDto.ApiResponsePaginationTransaction> listTransactionsByCardNumber(String cardNumber, int page, int size, String search);
+    Uni<TransactionDto.ApiResponsePaginationTransaction> listTransactions(FindAllTransactionsRequest request);
+    Uni<TransactionDto.ApiResponsePaginationTransaction> listTransactionsByCardNumber(FindTransactionsByCardNumberRequest request);
     Uni<TransactionDto.ApiResponseTransaction> getTransaction(int id);
     Uni<TransactionDto.ApiResponseTransactions> getTransactionsByMerchant(int merchantId);
-    Uni<TransactionDto.ApiResponsePaginationTransactionDeleteAt> getActiveTransactions(int page, int size, String search);
-    Uni<TransactionDto.ApiResponsePaginationTransactionDeleteAt> getTrashedTransactions(int page, int size, String search);
+    Uni<TransactionDto.ApiResponsePaginationTransactionDeleteAt> getActiveTransactions(FindAllTransactionsRequest request);
+    Uni<TransactionDto.ApiResponsePaginationTransactionDeleteAt> getTrashedTransactions(FindAllTransactionsRequest request);
     Uni<TransactionDto.ApiResponseTransaction> createTransaction(TransactionDto.CreateRequest body);
     Uni<TransactionDto.ApiResponseTransaction> updateTransaction(int id, TransactionDto.UpdateRequest body);
     Uni<TransactionDto.ApiResponseTransactionDeleteAt> deleteTransaction(int id);
@@ -35,8 +39,8 @@ public interface TransactionService {
     Uni<TransactionDto.ApiResponseTransactionYearStatusSuccess> getYearlyTransactionStatusSuccess(int year);
     Uni<TransactionDto.ApiResponseTransactionMonthStatusFailed> getMonthlyTransactionStatusFailed(int year, int month);
     Uni<TransactionDto.ApiResponseTransactionYearStatusFailed> getYearlyTransactionStatusFailed(int year);
-    Uni<TransactionDto.ApiResponseTransactionMonthStatusSuccess> getMonthlyTransactionStatusSuccessByCardNumber(String cardNumber, int year, int month);
+    Uni<TransactionDto.ApiResponseTransactionMonthStatusSuccess> getMonthlyTransactionStatusSuccessByCardNumber(GetTransactionStatusSuccessByCardNumberRequest request);
     Uni<TransactionDto.ApiResponseTransactionYearStatusSuccess> getYearlyTransactionStatusSuccessByCardNumber(String cardNumber, int year);
-    Uni<TransactionDto.ApiResponseTransactionMonthStatusFailed> getMonthlyTransactionStatusFailedByCardNumber(String cardNumber, int year, int month);
+    Uni<TransactionDto.ApiResponseTransactionMonthStatusFailed> getMonthlyTransactionStatusFailedByCardNumber(GetTransactionStatusFailedByCardNumberRequest request);
     Uni<TransactionDto.ApiResponseTransactionYearStatusFailed> getYearlyTransactionStatusFailedByCardNumber(String cardNumber, int year);
 }

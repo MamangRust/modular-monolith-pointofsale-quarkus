@@ -1,7 +1,7 @@
 package com.sanedge.transaction.handler;
 
 import com.sanedge.transaction.service.TransactionCommandService;
-import io.grpc.Status;
+import com.sanedge.common.grpc.GrpcErrorMapper;
 import io.quarkus.grpc.GrpcService;
 import io.smallrye.mutiny.Uni;
 import jakarta.inject.Inject;
@@ -41,6 +41,7 @@ public class TransactionCommandGrpcHandler extends MutinyTransactionCommandServi
         domainReq.setPaymentMethod(request.getPaymentMethod());
         domainReq.setAmount(request.getAmount());
         domainReq.setPaymentStatus("pending");
+        domainReq.setIdempotencyKey(request.getIdempotencyKey());
 
         return transactionCommandService.create(domainReq)
                 .map(apiResp -> {
@@ -52,7 +53,7 @@ public class TransactionCommandGrpcHandler extends MutinyTransactionCommandServi
                     }
                     return builder.build();
                 })
-                .onFailure().transform(e -> Status.INTERNAL.withDescription(e.getMessage()).asRuntimeException());
+                .onFailure().transform(GrpcErrorMapper::toStatusRuntimeException);
     }
 
     @Override
@@ -73,6 +74,7 @@ public class TransactionCommandGrpcHandler extends MutinyTransactionCommandServi
         domainReq.setPaymentMethod(request.getPaymentMethod());
         domainReq.setAmount(request.getAmount());
         domainReq.setPaymentStatus("pending");
+        domainReq.setIdempotencyKey(request.getIdempotencyKey());
 
         return transactionCommandService.update(domainReq)
                 .map(apiResp -> {
@@ -84,7 +86,7 @@ public class TransactionCommandGrpcHandler extends MutinyTransactionCommandServi
                     }
                     return builder.build();
                 })
-                .onFailure().transform(e -> Status.INTERNAL.withDescription(e.getMessage()).asRuntimeException());
+                .onFailure().transform(GrpcErrorMapper::toStatusRuntimeException);
     }
 
     @Override
@@ -99,7 +101,7 @@ public class TransactionCommandGrpcHandler extends MutinyTransactionCommandServi
                     }
                     return builder.build();
                 })
-                .onFailure().transform(e -> Status.INTERNAL.withDescription(e.getMessage()).asRuntimeException());
+                .onFailure().transform(GrpcErrorMapper::toStatusRuntimeException);
     }
 
     @Override
@@ -114,7 +116,7 @@ public class TransactionCommandGrpcHandler extends MutinyTransactionCommandServi
                     }
                     return builder.build();
                 })
-                .onFailure().transform(e -> Status.INTERNAL.withDescription(e.getMessage()).asRuntimeException());
+                .onFailure().transform(GrpcErrorMapper::toStatusRuntimeException);
     }
 
     @Override
@@ -124,7 +126,7 @@ public class TransactionCommandGrpcHandler extends MutinyTransactionCommandServi
                         .setStatus(apiResp.status())
                         .setMessage(apiResp.message())
                         .build())
-                .onFailure().transform(e -> Status.INTERNAL.withDescription(e.getMessage()).asRuntimeException());
+                .onFailure().transform(GrpcErrorMapper::toStatusRuntimeException);
     }
 
     @Override
@@ -134,7 +136,7 @@ public class TransactionCommandGrpcHandler extends MutinyTransactionCommandServi
                         .setStatus(apiResp.status())
                         .setMessage(apiResp.message())
                         .build())
-                .onFailure().transform(e -> Status.INTERNAL.withDescription(e.getMessage()).asRuntimeException());
+                .onFailure().transform(GrpcErrorMapper::toStatusRuntimeException);
     }
 
     @Override
@@ -144,7 +146,7 @@ public class TransactionCommandGrpcHandler extends MutinyTransactionCommandServi
                         .setStatus(apiResp.status())
                         .setMessage(apiResp.message())
                         .build())
-                .onFailure().transform(e -> Status.INTERNAL.withDescription(e.getMessage()).asRuntimeException());
+                .onFailure().transform(GrpcErrorMapper::toStatusRuntimeException);
     }
 
     private TransactionResponse toProto(com.sanedge.transaction.domain.response.TransactionResponse r) {

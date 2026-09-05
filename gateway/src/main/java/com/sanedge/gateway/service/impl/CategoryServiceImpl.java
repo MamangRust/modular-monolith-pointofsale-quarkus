@@ -1,6 +1,9 @@
 package com.sanedge.gateway.service.impl;
 
 import com.sanedge.gateway.dto.CategoryDto;
+import com.sanedge.gateway.domain.requests.FindAllCategoriesRequest;
+import com.sanedge.gateway.domain.requests.GetCategoryMonthlyTotalRequest;
+import com.sanedge.gateway.domain.requests.GetCategoryMonthlyTotalByMerchantRequest;
 import com.sanedge.gateway.service.CategoryService;
 import com.sanedge.gateway.telemetry.TelemetryHelper;
 import io.quarkus.grpc.GrpcClient;
@@ -30,12 +33,12 @@ public class CategoryServiceImpl implements CategoryService {
     pb.category.stats.MutinyCategoryPriceServiceGrpc.MutinyCategoryPriceServiceStub categoryPriceServiceStub;
 
     @Override
-    public Uni<CategoryDto.ApiResponsePaginationCategory> listCategories(int page, int size, String search) {
+    public Uni<CategoryDto.ApiResponsePaginationCategory> listCategories(FindAllCategoriesRequest request) {
         return telemetryHelper.traceAndMetric("category.listCategories", () -> 
             categoryQueryService.findAll(pb.category.Category.FindAllCategoryRequest.newBuilder()
-                    .setPage(page)
-                    .setPageSize(size)
-                    .setSearch(search == null ? "" : search)
+                    .setPage(request.getPage())
+                    .setPageSize(request.getSize())
+                    .setSearch(request.getSearch() == null ? "" : request.getSearch())
                     .build())
                     .map(CategoryDto.ApiResponsePaginationCategory::from)
                     .onFailure().invoke(throwable -> LOG.error("Failed to list categories: " + throwable.getMessage(), throwable))
@@ -54,12 +57,12 @@ public class CategoryServiceImpl implements CategoryService {
     }
 
     @Override
-    public Uni<CategoryDto.ApiResponsePaginationCategoryDeleteAt> getActiveCategories(int page, int size, String search) {
+    public Uni<CategoryDto.ApiResponsePaginationCategoryDeleteAt> getActiveCategories(FindAllCategoriesRequest request) {
         return telemetryHelper.traceAndMetric("category.getActiveCategories", () -> 
             categoryQueryService.findByActive(pb.category.Category.FindAllCategoryRequest.newBuilder()
-                    .setPage(page)
-                    .setPageSize(size)
-                    .setSearch(search == null ? "" : search)
+                    .setPage(request.getPage())
+                    .setPageSize(request.getSize())
+                    .setSearch(request.getSearch() == null ? "" : request.getSearch())
                     .build())
                     .map(CategoryDto.ApiResponsePaginationCategoryDeleteAt::from)
                     .onFailure().invoke(throwable -> LOG.error("Failed to list active categories: " + throwable.getMessage(), throwable))
@@ -67,12 +70,12 @@ public class CategoryServiceImpl implements CategoryService {
     }
 
     @Override
-    public Uni<CategoryDto.ApiResponsePaginationCategoryDeleteAt> getTrashedCategories(int page, int size, String search) {
+    public Uni<CategoryDto.ApiResponsePaginationCategoryDeleteAt> getTrashedCategories(FindAllCategoriesRequest request) {
         return telemetryHelper.traceAndMetric("category.getTrashedCategories", () -> 
             categoryQueryService.findByTrashed(pb.category.Category.FindAllCategoryRequest.newBuilder()
-                    .setPage(page)
-                    .setPageSize(size)
-                    .setSearch(search == null ? "" : search)
+                    .setPage(request.getPage())
+                    .setPageSize(request.getSize())
+                    .setSearch(request.getSearch() == null ? "" : request.getSearch())
                     .build())
                     .map(CategoryDto.ApiResponsePaginationCategoryDeleteAt::from)
                     .onFailure().invoke(throwable -> LOG.error("Failed to list trashed categories: " + throwable.getMessage(), throwable))
@@ -180,12 +183,12 @@ public class CategoryServiceImpl implements CategoryService {
     }
 
     @Override
-    public Uni<CategoryDto.ApiResponseCategoryMonthlyTotalPrice> getMonthlyTotalPricesById(int categoryId, int year, int month) {
+    public Uni<CategoryDto.ApiResponseCategoryMonthlyTotalPrice> getMonthlyTotalPricesById(GetCategoryMonthlyTotalRequest request) {
         return telemetryHelper.traceAndMetric("category.getMonthlyTotalPricesById", () -> 
             categoryTotalPriceServiceStub.findMonthlyTotalPricesById(pb.category.Category.FindYearMonthTotalPriceById.newBuilder()
-                    .setCategoryId(categoryId)
-                    .setYear(year)
-                    .setMonth(month)
+                    .setCategoryId(request.getCategoryId())
+                    .setYear(request.getYear())
+                    .setMonth(request.getMonth())
                     .build())
                     .map(CategoryDto.ApiResponseCategoryMonthlyTotalPrice::from)
                     .onFailure().invoke(throwable -> LOG.error("Failed to get monthly total prices by id: " + throwable.getMessage(), throwable))
@@ -205,12 +208,12 @@ public class CategoryServiceImpl implements CategoryService {
     }
 
     @Override
-    public Uni<CategoryDto.ApiResponseCategoryMonthlyTotalPrice> getMonthlyTotalPricesByMerchant(int merchantId, int year, int month) {
+    public Uni<CategoryDto.ApiResponseCategoryMonthlyTotalPrice> getMonthlyTotalPricesByMerchant(GetCategoryMonthlyTotalByMerchantRequest request) {
         return telemetryHelper.traceAndMetric("category.getMonthlyTotalPricesByMerchant", () -> 
             categoryTotalPriceServiceStub.findMonthlyTotalPricesByMerchant(pb.category.Category.FindYearMonthTotalPriceByMerchant.newBuilder()
-                    .setMerchantId(merchantId)
-                    .setYear(year)
-                    .setMonth(month)
+                    .setMerchantId(request.getMerchantId())
+                    .setYear(request.getYear())
+                    .setMonth(request.getMonth())
                     .build())
                     .map(CategoryDto.ApiResponseCategoryMonthlyTotalPrice::from)
                     .onFailure().invoke(throwable -> LOG.error("Failed to get monthly total prices by merchant: " + throwable.getMessage(), throwable))

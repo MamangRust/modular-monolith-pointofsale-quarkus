@@ -11,7 +11,8 @@ public class TransactionDto {
             int amount,
             String paymentMethod,
             int merchantId,
-            String transactionTime) {
+            String transactionTime,
+            String idempotencyKey) {
         public com.google.protobuf.Timestamp toProtoTimestamp() {
             try {
                 if (transactionTime != null && !transactionTime.isBlank()) {
@@ -39,7 +40,8 @@ public class TransactionDto {
             int amount,
             String paymentMethod,
             int merchantId,
-            String transactionTime) {
+            String transactionTime,
+            String idempotencyKey) {
         public com.google.protobuf.Timestamp toProtoTimestamp() {
             try {
                 if (transactionTime != null && !transactionTime.isBlank()) {

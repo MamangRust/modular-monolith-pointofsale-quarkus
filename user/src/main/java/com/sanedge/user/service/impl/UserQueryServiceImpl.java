@@ -1,7 +1,9 @@
 package com.sanedge.user.service.impl;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.function.Function;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
@@ -11,28 +13,21 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sanedge.common.config.RedisService;
-import com.sanedge.common.utils.PasswordUtil;
-import com.sanedge.user.domain.requests.FindAllUsers;
 import com.sanedge.common.domain.response.ApiResponse;
 import com.sanedge.common.domain.response.ApiResponsePagination;
 import com.sanedge.common.domain.response.PagedResult;
 import com.sanedge.common.domain.response.PaginationMeta;
+import com.sanedge.common.observability.TracingMetrics;
+import com.sanedge.common.utils.PasswordUtil;
+import com.sanedge.user.domain.requests.FindAllUsers;
 import com.sanedge.user.domain.response.UserResponse;
 import com.sanedge.user.domain.response.UserResponseDeleteAt;
 import com.sanedge.user.repository.UserRepository;
 import com.sanedge.user.service.UserQueryService;
 
-import io.opentelemetry.api.OpenTelemetry;
-import io.opentelemetry.api.common.AttributeKey;
 import io.opentelemetry.api.common.Attributes;
-import io.opentelemetry.api.metrics.DoubleHistogram;
-import io.opentelemetry.api.metrics.LongCounter;
-import io.opentelemetry.api.metrics.Meter;
-import io.opentelemetry.api.trace.Span;
-import io.opentelemetry.api.trace.SpanKind;
-import io.opentelemetry.api.trace.StatusCode;
-import io.opentelemetry.api.trace.Tracer;
 import io.smallrye.mutiny.Uni;
+import io.quarkus.hibernate.reactive.panache.common.WithTransaction;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.NotFoundException;
@@ -41,37 +36,22 @@ import jakarta.ws.rs.NotFoundException;
 public class UserQueryServiceImpl implements UserQueryService {
         private static final Logger logger = LoggerFactory.getLogger(UserQueryServiceImpl.class);
 
-        UserRepository userRepository;
-        OpenTelemetry openTelemetry;
-        RedisService redisService;
-
-        private final Tracer tracer;
-        private final LongCounter requestsTotal;
-        private final DoubleHistogram requestDurationSeconds;
-
+        private final UserRepository userRepository;
+        private final RedisService redisService;
         private final ObjectMapper objectMapper;
         private final PasswordUtil passwordUtil;
+        private final TracingMetrics tracingMetrics;
 
         private static final long LIST_CACHE_TTL_SECONDS = 300;
 
         @Inject
-        public UserQueryServiceImpl(UserRepository userRepository, OpenTelemetry openTelemetry, RedisService redisService,
-                        ObjectMapper objectMapper, PasswordUtil passwordUtil) {
+        public UserQueryServiceImpl(UserRepository userRepository, RedisService redisService,
+                        ObjectMapper objectMapper, PasswordUtil passwordUtil, TracingMetrics tracingMetrics) {
                 this.userRepository = userRepository;
-                this.openTelemetry = openTelemetry;
                 this.redisService = redisService;
                 this.objectMapper = objectMapper;
                 this.passwordUtil = passwordUtil;
-                this.tracer = openTelemetry.getTracer("user-query-service", "1.0.0");
-                Meter meter = openTelemetry.getMeter("user-query-service");
-
-                this.requestsTotal = meter.counterBuilder("requests_total")
-                                .setDescription("Total number of requests")
-                                .build();
-                this.requestDurationSeconds = meter.histogramBuilder("request_duration_seconds")
-                                .setDescription("Request duration in seconds")
-                                .setUnit("s")
-                                .build();
+                this.tracingMetrics = tracingMetrics;
         }
 
         private String toJson(Object obj) {
@@ -102,272 +82,254 @@ public class UserQueryServiceImpl implements UserQueryService {
         }
 
         @Override
+        @WithTransaction
         public Uni<ApiResponsePagination<List<UserResponse>>> findAllPaginated(FindAllUsers request) {
                 String cacheKey = String.format("users:all:%d:%d:%s", request.getPage(), request.getPageSize(),
                                 request.getSearch());
 
                 return redisService.getReactive(cacheKey)
                                 .chain(cachedJson -> {
-                                         if (cachedJson != null) {
-                                                 logger.info("Cache HIT for key: {}", cacheKey);
-                                                 ApiResponsePagination<List<UserResponse>> response = fromJson(cachedJson,
-                                                                 new TypeReference<ApiResponsePagination<List<UserResponse>>>() {
-                                                                 });
-                                                 return Uni.createFrom().item(response);
-                                         }
+                                        if (cachedJson != null) {
+                                                logger.info("Cache HIT for key: {}", cacheKey);
+                                                ApiResponsePagination<List<UserResponse>> response = fromJson(
+                                                                cachedJson,
+                                                                new TypeReference<ApiResponsePagination<List<UserResponse>>>() {
+                                                                });
+                                                return Uni.createFrom().item(response);
+                                        }
 
-                                         logger.info("Cache MISS for key: {}. Fetching from DB.", cacheKey);
-                                         long startTime = System.currentTimeMillis();
-                                         Span span = tracer.spanBuilder("findAllUsers")
-                                                         .setSpanKind(SpanKind.SERVER)
-                                                         .setAttribute("service.name", "user-service")
-                                                         .setAttribute("operation", "find_all_users")
-                                                         .startSpan();
+                                        logger.info("Cache MISS for key: {}. Fetching from DB.", cacheKey);
+                                        return runTraced("findAllUsers", "find_all_users", Attributes.empty(),
+                                                        () -> userRepository.findUsers(request)
+                                                                        .chain(pagedResult -> {
+                                                                                ApiResponsePagination<List<UserResponse>> response = buildPaginatedResponse(
+                                                                                                pagedResult, request,
+                                                                                                "Users retrieved successfully",
+                                                                                                UserResponse::from);
 
-                                         return userRepository.findUsers(request)
-                                                         .chain(pagedResult -> {
-                                                                 span.setAttribute("user.count", pagedResult.getTotalRecords());
-                                                                 span.setAttribute("user.page", request.getPage());
-                                                                 span.setAttribute("user.size", request.getPageSize());
-
-                                                                 ApiResponsePagination<List<UserResponse>> response = buildPaginatedResponse(
-                                                                                 pagedResult, request, "Users retrieved successfully",
-                                                                                 UserResponse::from);
-
-                                                                 return redisService.setWithExpirationReactive(cacheKey, toJson(response), LIST_CACHE_TTL_SECONDS)
-                                                                                 .map(v -> {
-                                                                                         logger.info("Cached response for key: {}", cacheKey);
-                                                                                         logger.info("Successfully retrieved {} users", pagedResult.getTotalRecords());
-                                                                                         span.setStatus(StatusCode.OK);
-
-                                                                                         requestsTotal.add(1, Attributes.of(
-                                                                                                         AttributeKey.stringKey("operation"), "find_all_users",
-                                                                                                         AttributeKey.stringKey("status"), "success"));
-                                                                                         return response;
-                                                                                 });
-                                                         })
-                                                         .onFailure().invoke(e -> {
-                                                                 logger.error("Error finding all users", e);
-                                                                 span.recordException(e);
-                                                                 span.setStatus(StatusCode.ERROR, e.getMessage());
-
-                                                                 requestsTotal.add(1, Attributes.of(
-                                                                                 AttributeKey.stringKey("operation"), "find_all_users",
-                                                                                 AttributeKey.stringKey("status"), "failed",
-                                                                                 AttributeKey.stringKey("error_type"), e.getClass().getSimpleName()));
-                                                         })
-                                                         .eventually(() -> {
-                                                                 span.end();
-                                                                 double duration = (System.currentTimeMillis() - startTime) / 1000.0;
-                                                                 requestDurationSeconds.record(duration, Attributes.of(
-                                                                                 AttributeKey.stringKey("operation"), "find_all_users"));
-                                                                 logger.debug("Find all users operation completed in {} seconds", duration);
-                                                         });
-                                 });
+                                                                                return redisService
+                                                                                                .setWithExpirationReactive(
+                                                                                                                cacheKey,
+                                                                                                                toJson(response),
+                                                                                                                LIST_CACHE_TTL_SECONDS)
+                                                                                                .map(v -> {
+                                                                                                        logger.info("Cached response for key: {}",
+                                                                                                                        cacheKey);
+                                                                                                        logger.info("Successfully retrieved {} users",
+                                                                                                                        pagedResult.getTotalRecords());
+                                                                                                        return response;
+                                                                                                });
+                                                                        })
+                                                                        .onFailure().recoverWithItem(e -> {
+                                                                                logger.error("Failed to fetch users: {}",
+                                                                                                e.getMessage(), e);
+                                                                                return new ApiResponsePagination<>(
+                                                                                                "error",
+                                                                                                "Failed to fetch users: "
+                                                                                                                + e.getMessage(),
+                                                                                                Collections.emptyList(),
+                                                                                                null);
+                                                                        }));
+                                });
         }
 
         @Override
+        @WithTransaction
         public Uni<ApiResponsePagination<List<UserResponseDeleteAt>>> findActivePaginated(FindAllUsers request) {
                 String cacheKey = String.format("users:active:%d:%d:%s", request.getPage(), request.getPageSize(),
                                 request.getSearch());
 
                 return redisService.getReactive(cacheKey)
                                 .chain(cachedJson -> {
-                                         if (cachedJson != null) {
-                                                 logger.info("Cache HIT for key: {}", cacheKey);
-                                                 ApiResponsePagination<List<UserResponseDeleteAt>> response = fromJson(cachedJson,
-                                                                 new TypeReference<ApiResponsePagination<List<UserResponseDeleteAt>>>() {
-                                                                 });
-                                                 return Uni.createFrom().item(response);
-                                         }
+                                        if (cachedJson != null) {
+                                                logger.info("Cache HIT for key: {}", cacheKey);
+                                                ApiResponsePagination<List<UserResponseDeleteAt>> response = fromJson(
+                                                                cachedJson,
+                                                                new TypeReference<ApiResponsePagination<List<UserResponseDeleteAt>>>() {
+                                                                });
+                                                return Uni.createFrom().item(response);
+                                        }
 
-                                         logger.info("Cache MISS for key: {}. Fetching from DB.", cacheKey);
-                                         long startTime = System.currentTimeMillis();
-                                         Span span = tracer.spanBuilder("findActiveUsers")
-                                                         .setSpanKind(SpanKind.SERVER)
-                                                         .setAttribute("service.name", "user-service")
-                                                         .setAttribute("operation", "find_active_users")
-                                                         .startSpan();
+                                        logger.info("Cache MISS for key: {}. Fetching from DB.", cacheKey);
+                                        return runTraced("findActiveUsers", "find_active_users", Attributes.empty(),
+                                                        () -> userRepository.findActiveUsers(request)
+                                                                        .chain(pagedResult -> {
+                                                                                ApiResponsePagination<List<UserResponseDeleteAt>> response = buildPaginatedResponse(
+                                                                                                pagedResult, request,
+                                                                                                "Active users retrieved successfully",
+                                                                                                UserResponseDeleteAt::from);
 
-                                         return userRepository.findActiveUsers(request)
-                                                         .chain(pagedResult -> {
-                                                                 span.setAttribute("user.count", pagedResult.getTotalRecords());
-                                                                 span.setAttribute("user.page", request.getPage());
-                                                                 span.setAttribute("user.size", request.getPageSize());
-
-                                                                 ApiResponsePagination<List<UserResponseDeleteAt>> response = buildPaginatedResponse(
-                                                                                 pagedResult, request, "Active users retrieved successfully",
-                                                                                 UserResponseDeleteAt::from);
-
-                                                                 return redisService.setWithExpirationReactive(cacheKey, toJson(response), LIST_CACHE_TTL_SECONDS)
-                                                                                 .map(v -> {
-                                                                                         logger.info("Cached response for key: {}", cacheKey);
-                                                                                         logger.info("Successfully retrieved {} active users", pagedResult.getTotalRecords());
-                                                                                         span.setStatus(StatusCode.OK);
-
-                                                                                         requestsTotal.add(1, Attributes.of(
-                                                                                                         AttributeKey.stringKey("operation"), "find_active_users",
-                                                                                                         AttributeKey.stringKey("status"), "success"));
-                                                                                         return response;
-                                                                                 });
-                                                         })
-                                                         .onFailure().invoke(e -> {
-                                                                 logger.error("Error finding active users", e);
-                                                                 span.recordException(e);
-                                                                 span.setStatus(StatusCode.ERROR, e.getMessage());
-
-                                                                 requestsTotal.add(1, Attributes.of(
-                                                                                 AttributeKey.stringKey("operation"), "find_active_users",
-                                                                                 AttributeKey.stringKey("status"), "failed",
-                                                                                 AttributeKey.stringKey("error_type"), e.getClass().getSimpleName()));
-                                                         })
-                                                         .eventually(() -> {
-                                                                 span.end();
-                                                                 double duration = (System.currentTimeMillis() - startTime) / 1000.0;
-                                                                 requestDurationSeconds.record(duration, Attributes.of(
-                                                                                 AttributeKey.stringKey("operation"), "find_active_users"));
-                                                                 logger.debug("Find active users operation completed in {} seconds", duration);
-                                                         });
-                                 });
+                                                                                return redisService
+                                                                                                .setWithExpirationReactive(
+                                                                                                                cacheKey,
+                                                                                                                toJson(response),
+                                                                                                                LIST_CACHE_TTL_SECONDS)
+                                                                                                .map(v -> {
+                                                                                                        logger.info("Cached response for key: {}",
+                                                                                                                        cacheKey);
+                                                                                                        logger.info("Successfully retrieved {} active users",
+                                                                                                                        pagedResult.getTotalRecords());
+                                                                                                        return response;
+                                                                                                });
+                                                                        })
+                                                                        .onFailure().recoverWithItem(e -> {
+                                                                                logger.error("Failed to fetch active users: {}",
+                                                                                                e.getMessage(), e);
+                                                                                return new ApiResponsePagination<>(
+                                                                                                "error",
+                                                                                                "Failed to fetch active users: "
+                                                                                                                + e.getMessage(),
+                                                                                                Collections.emptyList(),
+                                                                                                null);
+                                                                        }));
+                                });
         }
 
         @Override
+        @WithTransaction
         public Uni<ApiResponsePagination<List<UserResponseDeleteAt>>> findTrashedPaginated(FindAllUsers request) {
                 String cacheKey = String.format("users:trashed:%d:%d:%s", request.getPage(), request.getPageSize(),
                                 request.getSearch());
 
                 return redisService.getReactive(cacheKey)
                                 .chain(cachedJson -> {
-                                         if (cachedJson != null) {
-                                                 logger.info("Cache HIT for key: {}", cacheKey);
-                                                 ApiResponsePagination<List<UserResponseDeleteAt>> response = fromJson(cachedJson,
-                                                                 new TypeReference<ApiResponsePagination<List<UserResponseDeleteAt>>>() {
-                                                                 });
-                                                 return Uni.createFrom().item(response);
-                                         }
+                                        if (cachedJson != null) {
+                                                logger.info("Cache HIT for key: {}", cacheKey);
+                                                ApiResponsePagination<List<UserResponseDeleteAt>> response = fromJson(
+                                                                cachedJson,
+                                                                new TypeReference<ApiResponsePagination<List<UserResponseDeleteAt>>>() {
+                                                                });
+                                                return Uni.createFrom().item(response);
+                                        }
 
-                                         logger.info("Cache MISS for key: {}. Fetching from DB.", cacheKey);
-                                         long startTime = System.currentTimeMillis();
-                                         Span span = tracer.spanBuilder("findTrashedUsers")
-                                                         .setSpanKind(SpanKind.SERVER)
-                                                         .setAttribute("service.name", "user-service")
-                                                         .setAttribute("operation", "find_trashed_users")
-                                                         .startSpan();
+                                        logger.info("Cache MISS for key: {}. Fetching from DB.", cacheKey);
+                                        return runTraced("findTrashedUsers", "find_trashed_users", Attributes.empty(),
+                                                        () -> userRepository.findTrashedUsers(request)
+                                                                        .chain(pagedResult -> {
+                                                                                ApiResponsePagination<List<UserResponseDeleteAt>> response = buildPaginatedResponse(
+                                                                                                pagedResult, request,
+                                                                                                "Trashed users retrieved successfully",
+                                                                                                UserResponseDeleteAt::from);
 
-                                         return userRepository.findTrashedUsers(request)
-                                                         .chain(pagedResult -> {
-                                                                 span.setAttribute("user.count", pagedResult.getTotalRecords());
-                                                                 span.setAttribute("user.page", request.getPage());
-                                                                 span.setAttribute("user.size", request.getPageSize());
-
-                                                                 ApiResponsePagination<List<UserResponseDeleteAt>> response = buildPaginatedResponse(
-                                                                                 pagedResult, request, "Trashed users retrieved successfully",
-                                                                                 UserResponseDeleteAt::from);
-
-                                                                 return redisService.setWithExpirationReactive(cacheKey, toJson(response), LIST_CACHE_TTL_SECONDS)
-                                                                                 .map(v -> {
-                                                                                         logger.info("Cached response for key: {}", cacheKey);
-                                                                                         logger.info("Successfully retrieved {} trashed users", pagedResult.getTotalRecords());
-                                                                                         span.setStatus(StatusCode.OK);
-
-                                                                                         requestsTotal.add(1, Attributes.of(
-                                                                                                         AttributeKey.stringKey("operation"), "find_trashed_users",
-                                                                                                         AttributeKey.stringKey("status"), "success"));
-                                                                                         return response;
-                                                                                 });
-                                                         })
-                                                         .onFailure().invoke(e -> {
-                                                                 logger.error("Error finding trashed users", e);
-                                                                 span.recordException(e);
-                                                                 span.setStatus(StatusCode.ERROR, e.getMessage());
-
-                                                                 requestsTotal.add(1, Attributes.of(
-                                                                                 AttributeKey.stringKey("operation"), "find_trashed_users",
-                                                                                 AttributeKey.stringKey("status"), "failed",
-                                                                                 AttributeKey.stringKey("error_type"), e.getClass().getSimpleName()));
-                                                         })
-                                                         .eventually(() -> {
-                                                                 span.end();
-                                                                 double duration = (System.currentTimeMillis() - startTime) / 1000.0;
-                                                                 requestDurationSeconds.record(duration, Attributes.of(
-                                                                                 AttributeKey.stringKey("operation"), "find_trashed_users"));
-                                                                 logger.debug("Find trashed users operation completed in {} seconds", duration);
-                                                         });
-                                 });
+                                                                                return redisService
+                                                                                                .setWithExpirationReactive(
+                                                                                                                cacheKey,
+                                                                                                                toJson(response),
+                                                                                                                LIST_CACHE_TTL_SECONDS)
+                                                                                                .map(v -> {
+                                                                                                        logger.info("Cached response for key: {}",
+                                                                                                                        cacheKey);
+                                                                                                        logger.info("Successfully retrieved {} trashed users",
+                                                                                                                        pagedResult.getTotalRecords());
+                                                                                                        return response;
+                                                                                                });
+                                                                        })
+                                                                        .onFailure().recoverWithItem(e -> {
+                                                                                logger.error("Failed to fetch trashed users: {}",
+                                                                                                e.getMessage(), e);
+                                                                                return new ApiResponsePagination<>(
+                                                                                                "error",
+                                                                                                "Failed to fetch trashed users: "
+                                                                                                                + e.getMessage(),
+                                                                                                Collections.emptyList(),
+                                                                                                null);
+                                                                        }));
+                                });
         }
 
         @Override
+        @WithTransaction
         public Uni<ApiResponse<UserResponse>> findById(Long id) {
                 String cacheKey = "user:" + id;
 
                 return redisService.getReactive(cacheKey)
                                 .chain(cachedJson -> {
-                                         if (cachedJson != null) {
-                                                 logger.info("Cache HIT for key: {}", cacheKey);
-                                                 UserResponse cachedUser = fromJson(cachedJson, UserResponse.class);
-                                                 return Uni.createFrom().item(ApiResponse.success("User found", cachedUser));
-                                         }
+                                        if (cachedJson != null) {
+                                                logger.info("Cache HIT for key: {}", cacheKey);
+                                                UserResponse cachedUser = fromJson(cachedJson, UserResponse.class);
+                                                return Uni.createFrom()
+                                                                .item(ApiResponse.success("User found", cachedUser));
+                                        }
 
-                                         logger.info("Cache MISS for key: {}. Fetching from DB.", cacheKey);
-                                         long startTime = System.currentTimeMillis();
-                                         Span span = tracer.spanBuilder("findUserById")
-                                                         .setSpanKind(SpanKind.SERVER)
-                                                         .setAttribute("service.name", "user-service")
-                                                         .setAttribute("operation", "find_user_by_id")
-                                                         .setAttribute("user.id", id.toString())
-                                                         .startSpan();
+                                        logger.info("Cache MISS for key: {}. Fetching from DB.", cacheKey);
+                                        Attributes attrs = Attributes.builder()
+                                                        .put("user.id", id.toString())
+                                                        .build();
 
-                                         return userRepository.findById(id)
-                                                         .chain(user -> {
-                                                                 if (user == null) {
-                                                                         logger.warn("User not found with id: {}", id);
-                                                                         span.setStatus(StatusCode.ERROR, "User not found");
-                                                                         span.setAttribute("user.found", false);
+                                        return runTraced("findUserById", "find_user_by_id", attrs,
+                                                        () -> userRepository.findById(id)
+                                                                        .chain(user -> {
+                                                                                if (user == null) {
+                                                                                        logger.warn("User not found with id: {}",
+                                                                                                        id);
+                                                                                        throw new NotFoundException(
+                                                                                                        "User not found with id: "
+                                                                                                                        + id);
+                                                                                }
 
-                                                                         requestsTotal.add(1, Attributes.of(
-                                                                                         AttributeKey.stringKey("operation"), "find_user_by_id",
-                                                                                         AttributeKey.stringKey("status"), "failed",
-                                                                                         AttributeKey.stringKey("error_type"), "not_found"));
+                                                                                UserResponse userResponse = UserResponse
+                                                                                                .from(user);
 
-                                                                         throw new NotFoundException("User not found with id: " + id);
-                                                                 }
+                                                                                return redisService.setReactive(
+                                                                                                cacheKey,
+                                                                                                toJson(userResponse))
+                                                                                                .map(v -> {
+                                                                                                        logger.info("Cached user for key: {}",
+                                                                                                                        cacheKey);
+                                                                                                        logger.info("Successfully found user with id: {} and username: {}",
+                                                                                                                        id,
+                                                                                                                        user.getUsername());
+                                                                                                        return ApiResponse
+                                                                                                                        .success("User found",
+                                                                                                                                        userResponse);
+                                                                                                });
+                                                                        })
+                                                                        .onFailure().recoverWithItem(e -> {
+                                                                                logger.error("Failed to fetch user by id={}: {}",
+                                                                                                id, e.getMessage(), e);
+                                                                                return new ApiResponse<>("error",
+                                                                                                "Failed to fetch user: "
+                                                                                                                + e.getMessage(),
+                                                                                                (UserResponse) null);
+                                                                        }));
+                                });
+        }
 
-                                                                 span.setAttribute("user.found", true);
-                                                                 span.setAttribute("user.username", user.getUsername());
+        @Override
+        @WithTransaction
+        public Uni<ApiResponse<UserResponse>> verifyPassword(String email, String password) {
+                logger.info("Verifying password for email: {}", email);
+                Attributes attrs = Attributes.builder()
+                                .put("user.email", email)
+                                .build();
 
-                                                                 UserResponse userResponse = UserResponse.from(user);
-
-                                                                 return redisService.setReactive(cacheKey, toJson(userResponse))
-                                                                                 .map(v -> {
-                                                                                         logger.info("Cached user for key: {}", cacheKey);
-                                                                                         logger.info("Successfully found user with id: {} and username: {}", id, user.getUsername());
-                                                                                         span.setStatus(StatusCode.OK);
-
-                                                                                         requestsTotal.add(1, Attributes.of(
-                                                                                                         AttributeKey.stringKey("operation"), "find_user_by_id",
-                                                                                                         AttributeKey.stringKey("status"), "success"));
-
-                                                                                         return ApiResponse.success("User found", userResponse);
-                                                                                 });
-                                                         })
-                                                         .onFailure().invoke(e -> {
-                                                                 logger.error("Error finding user by id: {}", id, e);
-                                                                 span.recordException(e);
-                                                                 span.setStatus(StatusCode.ERROR, e.getMessage());
-
-                                                                 requestsTotal.add(1, Attributes.of(
-                                                                                 AttributeKey.stringKey("operation"), "find_user_by_id",
-                                                                                 AttributeKey.stringKey("status"), "failed",
-                                                                                 AttributeKey.stringKey("error_type"), e.getClass().getSimpleName()));
-                                                         })
-                                                         .eventually(() -> {
-                                                                 span.end();
-                                                                 double duration = (System.currentTimeMillis() - startTime) / 1000.0;
-                                                                 requestDurationSeconds.record(duration, Attributes.of(
-                                                                                 AttributeKey.stringKey("operation"), "find_user_by_id"));
-                                                                 logger.debug("Find user by id operation completed in {} seconds", duration);
-                                                         });
-                                 });
+                return runTraced("verifyPassword", "verify_password", attrs,
+                                () -> userRepository.findByEmail(email)
+                                                .chain(user -> {
+                                                        if (user == null) {
+                                                                logger.warn("User not found with email: {}", email);
+                                                                throw new NotFoundException("User not found");
+                                                        }
+                                                        boolean match = passwordUtil.verifyPassword(password,
+                                                                        user.getPassword());
+                                                        if (!match) {
+                                                                logger.warn("Invalid password attempt for email: {}",
+                                                                                email);
+                                                                throw new jakarta.ws.rs.BadRequestException(
+                                                                                "Invalid password");
+                                                        }
+                                                        logger.info("Password verified successfully for email: {}",
+                                                                        email);
+                                                        return Uni.createFrom().item(ApiResponse.success(
+                                                                        "Password verified", UserResponse.from(user)));
+                                                })
+                                                .onFailure().recoverWithItem(e -> {
+                                                        logger.error("Failed to verify password for email={}: {}",
+                                                                        email, e.getMessage(), e);
+                                                        return new ApiResponse<>("error",
+                                                                        "Failed to verify password: " + e.getMessage(),
+                                                                        (UserResponse) null);
+                                                }));
         }
 
         private <T, R> ApiResponsePagination<List<R>> buildPaginatedResponse(
@@ -389,18 +351,8 @@ public class UserQueryServiceImpl implements UserQueryService {
                 return new ApiResponsePagination<>("success", successMessage, data, pagination);
         }
 
-        @Override
-        public Uni<ApiResponse<UserResponse>> verifyPassword(String email, String password) {
-                return userRepository.findByEmail(email)
-                                .chain(user -> {
-                                        if (user == null) {
-                                                return Uni.createFrom().failure(new NotFoundException("User not found"));
-                                        }
-                                        boolean match = passwordUtil.verifyPassword(password, user.getPassword());
-                                        if (!match) {
-                                                return Uni.createFrom().failure(new jakarta.ws.rs.BadRequestException("Invalid password"));
-                                        }
-                                        return Uni.createFrom().item(ApiResponse.success("Password verified", UserResponse.from(user)));
-                                });
+        private <T> Uni<T> runTraced(String operationName, String method, Attributes attributes,
+                        Supplier<Uni<T>> supplier) {
+                return tracingMetrics.traceAndMeasure(operationName, method, attributes, supplier);
         }
 }

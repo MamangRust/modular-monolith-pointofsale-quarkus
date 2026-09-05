@@ -71,12 +71,12 @@ public class OrderItemRepository implements PanacheRepository<OrderItem> {
                 .map(deletedCount -> deletedCount > 0);
     }
 
-    public Uni<PagedResult<OrderItem>> findOrderItems(String keyword, int page, int size) {
-        int pageIndex = page > 0 ? page - 1 : 0;
-        String searchKeyword = (keyword != null && !keyword.trim().isEmpty()) ? keyword.trim() : null;
+    public Uni<PagedResult<OrderItem>> findOrderItems(com.sanedge.order_item.domain.requests.FindAllOrderItems req) {
+        int pageIndex = req.getPage() > 0 ? req.getPage() - 1 : 0;
+        String searchKeyword = (req.getSearch() != null && !req.getSearch().trim().isEmpty()) ? req.getSearch().trim() : null;
 
         var query = """
-                    ?1 IS NULL
+                    CAST(?1 AS string) IS NULL
                     OR CAST(id AS string) LIKE CONCAT('%', ?1, '%')
                     OR CAST(orderId AS string) LIKE CONCAT('%', ?1, '%')
                     OR CAST(productId AS string) LIKE CONCAT('%', ?1, '%')
@@ -84,20 +84,20 @@ public class OrderItemRepository implements PanacheRepository<OrderItem> {
                 """;
 
         var panacheQuery = find(query, searchKeyword)
-                .page(pageIndex, size);
+                .page(pageIndex, req.getPageSize());
 
         return Uni.combine().all().unis(panacheQuery.list(), panacheQuery.count())
                 .asTuple()
                 .map(tuple -> new PagedResult<>(tuple.getItem1(), tuple.getItem2().intValue()));
     }
 
-    public Uni<PagedResult<OrderItem>> findActiveOrderItems(String keyword, int page, int size) {
-        int pageIndex = page > 0 ? page - 1 : 0;
-        String searchKeyword = (keyword != null && !keyword.trim().isEmpty()) ? keyword.trim() : null;
+    public Uni<PagedResult<OrderItem>> findActiveOrderItems(com.sanedge.order_item.domain.requests.FindAllOrderItems req) {
+        int pageIndex = req.getPage() > 0 ? req.getPage() - 1 : 0;
+        String searchKeyword = (req.getSearch() != null && !req.getSearch().trim().isEmpty()) ? req.getSearch().trim() : null;
 
         var query = """
                     deletedAt IS NULL
-                    AND (?1 IS NULL
+                    AND (CAST(?1 AS string) IS NULL
                         OR CAST(id AS string) LIKE CONCAT('%', ?1, '%')
                         OR CAST(orderId AS string) LIKE CONCAT('%', ?1, '%')
                         OR CAST(productId AS string) LIKE CONCAT('%', ?1, '%'))
@@ -105,20 +105,20 @@ public class OrderItemRepository implements PanacheRepository<OrderItem> {
                 """;
 
         var panacheQuery = find(query, searchKeyword)
-                .page(pageIndex, size);
+                .page(pageIndex, req.getPageSize());
 
         return Uni.combine().all().unis(panacheQuery.list(), panacheQuery.count())
                 .asTuple()
                 .map(tuple -> new PagedResult<>(tuple.getItem1(), tuple.getItem2().intValue()));
     }
 
-    public Uni<PagedResult<OrderItem>> findTrashedOrderItems(String keyword, int page, int size) {
-        int pageIndex = page > 0 ? page - 1 : 0;
-        String searchKeyword = (keyword != null && !keyword.trim().isEmpty()) ? keyword.trim() : null;
+    public Uni<PagedResult<OrderItem>> findTrashedOrderItems(com.sanedge.order_item.domain.requests.FindAllOrderItems req) {
+        int pageIndex = req.getPage() > 0 ? req.getPage() - 1 : 0;
+        String searchKeyword = (req.getSearch() != null && !req.getSearch().trim().isEmpty()) ? req.getSearch().trim() : null;
 
         var query = """
                     deletedAt IS NOT NULL
-                    AND (?1 IS NULL
+                    AND (CAST(?1 AS string) IS NULL
                         OR CAST(id AS string) LIKE CONCAT('%', ?1, '%')
                         OR CAST(orderId AS string) LIKE CONCAT('%', ?1, '%')
                         OR CAST(productId AS string) LIKE CONCAT('%', ?1, '%'))
@@ -126,7 +126,7 @@ public class OrderItemRepository implements PanacheRepository<OrderItem> {
                 """;
 
         var panacheQuery = find(query, searchKeyword)
-                .page(pageIndex, size);
+                .page(pageIndex, req.getPageSize());
 
         return Uni.combine().all().unis(panacheQuery.list(), panacheQuery.count())
                 .asTuple()

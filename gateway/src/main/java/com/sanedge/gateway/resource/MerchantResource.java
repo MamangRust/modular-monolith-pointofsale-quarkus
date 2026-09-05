@@ -4,6 +4,7 @@ import org.eclipse.microprofile.openapi.annotations.Operation;
 import org.eclipse.microprofile.openapi.annotations.tags.Tag;
 
 import com.sanedge.gateway.dto.MerchantDto;
+import com.sanedge.gateway.domain.requests.FindAllMerchantsRequest;
 import com.sanedge.gateway.service.MerchantService;
 
 import io.smallrye.mutiny.Uni;
@@ -39,7 +40,8 @@ public class MerchantResource {
                         @QueryParam("page") @DefaultValue("1") int page,
                         @QueryParam("size") @DefaultValue("20") int size,
                         @QueryParam("search") String search) {
-                return merchantService.listMerchants(page, size, search)
+                FindAllMerchantsRequest request = new FindAllMerchantsRequest(search, page, size);
+                return merchantService.listMerchants(request)
                                 .map(res -> Response.ok(res).build());
         }
 
@@ -60,7 +62,8 @@ public class MerchantResource {
                         @QueryParam("page") @DefaultValue("1") int page,
                         @QueryParam("size") @DefaultValue("20") int size,
                         @QueryParam("search") String search) {
-                return merchantService.getActiveMerchants(page, size, search)
+                FindAllMerchantsRequest request = new FindAllMerchantsRequest(search, page, size);
+                return merchantService.getActiveMerchants(request)
                                 .map(res -> Response.ok(res).build());
         }
 
@@ -72,7 +75,8 @@ public class MerchantResource {
                         @QueryParam("page") @DefaultValue("1") int page,
                         @QueryParam("size") @DefaultValue("20") int size,
                         @QueryParam("search") String search) {
-                return merchantService.getTrashedMerchants(page, size, search)
+                FindAllMerchantsRequest request = new FindAllMerchantsRequest(search, page, size);
+                return merchantService.getTrashedMerchants(request)
                                 .map(res -> Response.ok(res).build());
         }
 

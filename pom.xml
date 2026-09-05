@@ -25,6 +25,8 @@
         <lombok.version>1.18.42</lombok.version>
         <swagger-annotations.version>2.2.21</swagger-annotations.version>
         <quarkus-smallrye-health.version>3.30.5</quarkus-smallrye-health.version>
+        <testcontainers.version>1.21.4</testcontainers.version>
+        <assertj.version>3.25.3</assertj.version>
     </properties>
 
     <modules>
@@ -63,26 +65,6 @@
             </dependency>
             <dependency>
                 <groupId>com.sanedge</groupId>
-                <artifactId>user-service</artifactId>
-                <version>${project.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>com.sanedge</groupId>
-                <artifactId>product-service</artifactId>
-                <version>${project.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>com.sanedge</groupId>
-                <artifactId>order-service</artifactId>
-                <version>${project.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>com.sanedge</groupId>
-                <artifactId>card</artifactId>
-                <version>${project.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>com.sanedge</groupId>
                 <artifactId>merchant</artifactId>
                 <version>${project.version}</version>
             </dependency>
@@ -93,22 +75,7 @@
             </dependency>
             <dependency>
                 <groupId>com.sanedge</groupId>
-                <artifactId>saldo</artifactId>
-                <version>${project.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>com.sanedge</groupId>
-                <artifactId>topup</artifactId>
-                <version>${project.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>com.sanedge</groupId>
                 <artifactId>transaction</artifactId>
-                <version>${project.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>com.sanedge</groupId>
-                <artifactId>transfer</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
@@ -119,11 +86,6 @@
             <dependency>
                 <groupId>com.sanedge</groupId>
                 <artifactId>auth</artifactId>
-                <version>${project.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>com.sanedge</groupId>
-                <artifactId>withdraw</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
@@ -194,6 +156,39 @@
                 <artifactId>swagger-annotations-jakarta</artifactId>
                 <version>${swagger-annotations.version}</version>
             </dependency>
+
+            <!-- Test Dependencies -->
+            <dependency>
+                <groupId>org.testcontainers</groupId>
+                <artifactId>testcontainers</artifactId>
+                <version>${testcontainers.version}</version>
+                <scope>test</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.testcontainers</groupId>
+                <artifactId>postgresql</artifactId>
+                <version>${testcontainers.version}</version>
+                <scope>test</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.assertj</groupId>
+                <artifactId>assertj-core</artifactId>
+                <version>${assertj.version}</version>
+                <scope>test</scope>
+            </dependency>
+            <dependency>
+                <groupId>io.quarkus</groupId>
+                <artifactId>quarkus-test-vertx</artifactId>
+                <version>${quarkus.platform.version}</version>
+                <scope>test</scope>
+            </dependency>
+            <dependency>
+                <groupId>com.sanedge</groupId>
+                <artifactId>common</artifactId>
+                <version>${project.version}</version>
+                <type>test-jar</type>
+                <scope>test</scope>
+            </dependency>
         </dependencies>
     </dependencyManagement>
 
@@ -229,6 +224,20 @@
         <dependency>
             <groupId>io.quarkus</groupId>
             <artifactId>quarkus-smallrye-jwt</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-test-vertx</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!-- JUnit 4 TestRule diperlukan oleh DevServicesRedisProcessor (dari
+             quarkus-redis-client-deployment) saat quarkus:build dengan
+             -DskipTests; tanpa ini build gagal "Failed to load steps ...
+             org.junit.rules.TestRule". Quarkus membuangnya dari runtime app. -->
+        <dependency>
+            <groupId>junit</groupId>
+            <artifactId>junit</artifactId>
+            <version>4.13.2</version>
         </dependency>
     </dependencies>
 

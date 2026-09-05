@@ -1,6 +1,10 @@
 package com.sanedge.gateway.service.impl;
 
 import com.sanedge.gateway.dto.TransactionDto;
+import com.sanedge.gateway.domain.requests.FindAllTransactionsRequest;
+import com.sanedge.gateway.domain.requests.FindTransactionsByCardNumberRequest;
+import com.sanedge.gateway.domain.requests.GetTransactionStatusFailedByCardNumberRequest;
+import com.sanedge.gateway.domain.requests.GetTransactionStatusSuccessByCardNumberRequest;
 import com.sanedge.gateway.service.TransactionService;
 import com.sanedge.gateway.telemetry.TelemetryHelper;
 import io.quarkus.grpc.GrpcClient;
@@ -33,12 +37,12 @@ public class TransactionServiceImpl implements TransactionService {
     pb.transaction.stats.MutinyTransactionStatsStatusServiceGrpc.MutinyTransactionStatsStatusServiceStub transactionStatsStatusService;
 
     @Override
-    public Uni<TransactionDto.ApiResponsePaginationTransaction> listTransactions(int page, int size, String search) {
+    public Uni<TransactionDto.ApiResponsePaginationTransaction> listTransactions(FindAllTransactionsRequest request) {
         return telemetryHelper.traceAndMetric("transaction.listTransactions", () -> 
             transactionQueryService.findAllTransaction(pb.transaction.TransactionQuery.FindAllTransactionRequest.newBuilder()
-                    .setPage(page)
-                    .setPageSize(size)
-                    .setSearch(search == null ? "" : search)
+                    .setPage(request.getPage())
+                    .setPageSize(request.getSize())
+                    .setSearch(request.getSearch() == null ? "" : request.getSearch())
                     .build())
                     .map(TransactionDto.ApiResponsePaginationTransaction::from)
                     .onFailure().invoke(throwable -> LOG.error("Failed to list transactions: " + throwable.getMessage(), throwable))
@@ -46,13 +50,13 @@ public class TransactionServiceImpl implements TransactionService {
     }
 
     @Override
-    public Uni<TransactionDto.ApiResponsePaginationTransaction> listTransactionsByCardNumber(String cardNumber, int page, int size, String search) {
+    public Uni<TransactionDto.ApiResponsePaginationTransaction> listTransactionsByCardNumber(FindTransactionsByCardNumberRequest request) {
         return telemetryHelper.traceAndMetric("transaction.listTransactionsByCardNumber", () -> 
             transactionQueryService.findAllTransactionByCardNumber(pb.transaction.TransactionQuery.FindAllTransactionCardNumberRequest.newBuilder()
-                    .setCardNumber(cardNumber)
-                    .setPage(page)
-                    .setPageSize(size)
-                    .setSearch(search == null ? "" : search)
+                    .setCardNumber(request.getCardNumber())
+                    .setPage(request.getPage())
+                    .setPageSize(request.getSize())
+                    .setSearch(request.getSearch() == null ? "" : request.getSearch())
                     .build())
                     .map(TransactionDto.ApiResponsePaginationTransaction::from)
                     .onFailure().invoke(throwable -> LOG.error("Failed to list transactions by card number: " + throwable.getMessage(), throwable))
@@ -82,12 +86,12 @@ public class TransactionServiceImpl implements TransactionService {
     }
 
     @Override
-    public Uni<TransactionDto.ApiResponsePaginationTransactionDeleteAt> getActiveTransactions(int page, int size, String search) {
+    public Uni<TransactionDto.ApiResponsePaginationTransactionDeleteAt> getActiveTransactions(FindAllTransactionsRequest request) {
         return telemetryHelper.traceAndMetric("transaction.getActiveTransactions", () -> 
             transactionQueryService.findByActiveTransaction(pb.transaction.TransactionQuery.FindAllTransactionRequest.newBuilder()
-                    .setPage(page)
-                    .setPageSize(size)
-                    .setSearch(search == null ? "" : search)
+                    .setPage(request.getPage())
+                    .setPageSize(request.getSize())
+                    .setSearch(request.getSearch() == null ? "" : request.getSearch())
                     .build())
                     .map(TransactionDto.ApiResponsePaginationTransactionDeleteAt::from)
                     .onFailure().invoke(throwable -> LOG.error("Failed to list active transactions: " + throwable.getMessage(), throwable))
@@ -95,12 +99,12 @@ public class TransactionServiceImpl implements TransactionService {
     }
 
     @Override
-    public Uni<TransactionDto.ApiResponsePaginationTransactionDeleteAt> getTrashedTransactions(int page, int size, String search) {
+    public Uni<TransactionDto.ApiResponsePaginationTransactionDeleteAt> getTrashedTransactions(FindAllTransactionsRequest request) {
         return telemetryHelper.traceAndMetric("transaction.getTrashedTransactions", () -> 
             transactionQueryService.findByTrashedTransaction(pb.transaction.TransactionQuery.FindAllTransactionRequest.newBuilder()
-                    .setPage(page)
-                    .setPageSize(size)
-                    .setSearch(search == null ? "" : search)
+                    .setPage(request.getPage())
+                    .setPageSize(request.getSize())
+                    .setSearch(request.getSearch() == null ? "" : request.getSearch())
                     .build())
                     .map(TransactionDto.ApiResponsePaginationTransactionDeleteAt::from)
                     .onFailure().invoke(throwable -> LOG.error("Failed to list trashed transactions: " + throwable.getMessage(), throwable))
@@ -117,6 +121,7 @@ public class TransactionServiceImpl implements TransactionService {
                     .setPaymentMethod(body.paymentMethod() == null ? "" : body.paymentMethod())
                     .setMerchantId(body.merchantId())
                     .setTransactionTime(body.toProtoTimestamp())
+                    .setIdempotencyKey(body.idempotencyKey() == null ? "" : body.idempotencyKey())
                     .build())
                     .map(TransactionDto.ApiResponseTransaction::from)
                     .onFailure().invoke(throwable -> LOG.error("Failed to create transaction: " + throwable.getMessage(), throwable))
@@ -134,6 +139,7 @@ public class TransactionServiceImpl implements TransactionService {
                     .setPaymentMethod(body.paymentMethod() == null ? "" : body.paymentMethod())
                     .setMerchantId(body.merchantId())
                     .setTransactionTime(body.toProtoTimestamp())
+                    .setIdempotencyKey(body.idempotencyKey() == null ? "" : body.idempotencyKey())
                     .build())
                     .map(TransactionDto.ApiResponseTransaction::from)
                     .onFailure().invoke(throwable -> LOG.error("Failed to update transaction " + id + ": " + throwable.getMessage(), throwable))
@@ -333,12 +339,12 @@ public class TransactionServiceImpl implements TransactionService {
     }
 
     @Override
-    public Uni<TransactionDto.ApiResponseTransactionMonthStatusSuccess> getMonthlyTransactionStatusSuccessByCardNumber(String cardNumber, int year, int month) {
+    public Uni<TransactionDto.ApiResponseTransactionMonthStatusSuccess> getMonthlyTransactionStatusSuccessByCardNumber(GetTransactionStatusSuccessByCardNumberRequest request) {
         return telemetryHelper.traceAndMetric("transaction.getMonthlyTransactionStatusSuccessByCardNumber", () -> 
             transactionStatsStatusService.findMonthlyTransactionStatusSuccessByCardNumber(pb.transaction.Transaction.FindMonthlyTransactionStatusCardNumber.newBuilder()
-                    .setCardNumber(cardNumber)
-                    .setYear(year)
-                    .setMonth(month)
+                    .setCardNumber(request.getCardNumber())
+                    .setYear(request.getYear())
+                    .setMonth(request.getMonth())
                     .build())
                     .map(TransactionDto.ApiResponseTransactionMonthStatusSuccess::from)
                     .onFailure().invoke(throwable -> LOG.error("Failed to get monthly transaction status success by card number: " + throwable.getMessage(), throwable))
@@ -358,12 +364,12 @@ public class TransactionServiceImpl implements TransactionService {
     }
 
     @Override
-    public Uni<TransactionDto.ApiResponseTransactionMonthStatusFailed> getMonthlyTransactionStatusFailedByCardNumber(String cardNumber, int year, int month) {
+    public Uni<TransactionDto.ApiResponseTransactionMonthStatusFailed> getMonthlyTransactionStatusFailedByCardNumber(GetTransactionStatusFailedByCardNumberRequest request) {
         return telemetryHelper.traceAndMetric("transaction.getMonthlyTransactionStatusFailedByCardNumber", () -> 
             transactionStatsStatusService.findMonthlyTransactionStatusFailedByCardNumber(pb.transaction.Transaction.FindMonthlyTransactionStatusCardNumber.newBuilder()
-                    .setCardNumber(cardNumber)
-                    .setYear(year)
-                    .setMonth(month)
+                    .setCardNumber(request.getCardNumber())
+                    .setYear(request.getYear())
+                    .setMonth(request.getMonth())
                     .build())
                     .map(TransactionDto.ApiResponseTransactionMonthStatusFailed::from)
                     .onFailure().invoke(throwable -> LOG.error("Failed to get monthly transaction status failed by card number: " + throwable.getMessage(), throwable))

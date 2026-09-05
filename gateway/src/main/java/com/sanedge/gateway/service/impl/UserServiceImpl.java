@@ -1,6 +1,7 @@
 package com.sanedge.gateway.service.impl;
 
 import com.sanedge.gateway.dto.UserDto;
+import com.sanedge.gateway.domain.requests.FindAllUsersRequest;
 import com.sanedge.gateway.service.UserService;
 import com.sanedge.gateway.telemetry.TelemetryHelper;
 import io.quarkus.grpc.GrpcClient;
@@ -24,33 +25,33 @@ public class UserServiceImpl implements UserService {
     pb.user.MutinyUserCommandServiceGrpc.MutinyUserCommandServiceStub userCommandService;
 
     @Override
-    public Uni<UserDto.ApiResponsePaginationUser> listUsers(int page, int size, String search) {
+    public Uni<UserDto.ApiResponsePaginationUser> listUsers(FindAllUsersRequest request) {
         return telemetryHelper.traceAndMetric("user.listUsers", () -> userQueryService.findAll(pb.user.User.FindAllUserRequest.newBuilder()
-                .setPage(page)
-                .setPageSize(size)
-                .setSearch(search == null ? "" : search)
+                .setPage(request.getPage())
+                .setPageSize(request.getSize())
+                .setSearch(request.getSearch() == null ? "" : request.getSearch())
                 .build())
                 .map(UserDto.ApiResponsePaginationUser::from)
                 .onFailure().invoke(throwable -> LOG.error("Failed to list users: " + throwable.getMessage(), throwable)));
     }
 
     @Override
-    public Uni<UserDto.ApiResponsePaginationUserDeleteAt> getActiveUsers(int page, int size, String search) {
+    public Uni<UserDto.ApiResponsePaginationUserDeleteAt> getActiveUsers(FindAllUsersRequest request) {
         return telemetryHelper.traceAndMetric("user.getActiveUsers", () -> userQueryService.findByActive(pb.user.User.FindAllUserRequest.newBuilder()
-                .setPage(page)
-                .setPageSize(size)
-                .setSearch(search == null ? "" : search)
+                .setPage(request.getPage())
+                .setPageSize(request.getSize())
+                .setSearch(request.getSearch() == null ? "" : request.getSearch())
                 .build())
                 .map(UserDto.ApiResponsePaginationUserDeleteAt::from)
                 .onFailure().invoke(throwable -> LOG.error("Failed to list active users: " + throwable.getMessage(), throwable)));
     }
 
     @Override
-    public Uni<UserDto.ApiResponsePaginationUserDeleteAt> getTrashedUsers(int page, int size, String search) {
+    public Uni<UserDto.ApiResponsePaginationUserDeleteAt> getTrashedUsers(FindAllUsersRequest request) {
         return telemetryHelper.traceAndMetric("user.getTrashedUsers", () -> userQueryService.findByTrashed(pb.user.User.FindAllUserRequest.newBuilder()
-                .setPage(page)
-                .setPageSize(size)
-                .setSearch(search == null ? "" : search)
+                .setPage(request.getPage())
+                .setPageSize(request.getSize())
+                .setSearch(request.getSearch() == null ? "" : request.getSearch())
                 .build())
                 .map(UserDto.ApiResponsePaginationUserDeleteAt::from)
                 .onFailure().invoke(throwable -> LOG.error("Failed to list trashed users: " + throwable.getMessage(), throwable)));

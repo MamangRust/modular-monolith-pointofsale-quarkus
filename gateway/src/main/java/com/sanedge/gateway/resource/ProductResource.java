@@ -4,6 +4,9 @@ import org.eclipse.microprofile.openapi.annotations.Operation;
 import org.eclipse.microprofile.openapi.annotations.tags.Tag;
 
 import com.sanedge.gateway.dto.ProductDto;
+import com.sanedge.gateway.domain.requests.FindAllProductsRequest;
+import com.sanedge.gateway.domain.requests.FindProductsByMerchantRequest;
+import com.sanedge.gateway.domain.requests.FindProductsByCategoryRequest;
 import com.sanedge.gateway.service.ProductService;
 
 import io.smallrye.mutiny.Uni;
@@ -60,7 +63,8 @@ public class ProductResource {
             @QueryParam("page") @DefaultValue("1") int page,
             @QueryParam("size") @DefaultValue("20") int size,
             @QueryParam("search") String search) {
-        return productService.findAll(page, size, search)
+        FindAllProductsRequest request = new FindAllProductsRequest(search, page, size);
+        return productService.findAll(request)
                 .map(res -> Response.ok(res).build());
     }
 
@@ -72,7 +76,8 @@ public class ProductResource {
             @QueryParam("page") @DefaultValue("1") int page,
             @QueryParam("size") @DefaultValue("20") int size,
             @QueryParam("search") String search) {
-        return productService.findByActive(page, size, search)
+        FindAllProductsRequest request = new FindAllProductsRequest(search, page, size);
+        return productService.findByActive(request)
                 .map(res -> Response.ok(res).build());
     }
 
@@ -84,7 +89,8 @@ public class ProductResource {
             @QueryParam("page") @DefaultValue("1") int page,
             @QueryParam("size") @DefaultValue("20") int size,
             @QueryParam("search") String search) {
-        return productService.findByTrashed(page, size, search)
+        FindAllProductsRequest request = new FindAllProductsRequest(search, page, size);
+        return productService.findByTrashed(request)
                 .map(res -> Response.ok(res).build());
     }
 
@@ -109,7 +115,8 @@ public class ProductResource {
             @QueryParam("maxPrice") @DefaultValue("0") int maxPrice,
             @QueryParam("page") @DefaultValue("1") int page,
             @QueryParam("size") @DefaultValue("20") int size) {
-        return productService.findByMerchant(merchantId, search, categoryId, minPrice, maxPrice, page, size)
+        FindProductsByMerchantRequest request = new FindProductsByMerchantRequest(merchantId, search, categoryId, minPrice, maxPrice, page, size);
+        return productService.findByMerchant(request)
                 .map(res -> Response.ok(res).build());
     }
 
@@ -124,7 +131,8 @@ public class ProductResource {
             @QueryParam("search") String search,
             @QueryParam("minPrice") @DefaultValue("0") int minPrice,
             @QueryParam("maxPrice") @DefaultValue("0") int maxPrice) {
-        return productService.findByCategory(categoryName, page, size, search, minPrice, maxPrice)
+        FindProductsByCategoryRequest request = new FindProductsByCategoryRequest(categoryName, page, size, search, minPrice, maxPrice);
+        return productService.findByCategory(request)
                 .map(res -> Response.ok(res).build());
     }
 

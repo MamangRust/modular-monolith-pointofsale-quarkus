@@ -1,13 +1,16 @@
 package com.sanedge.gateway.service;
 
 import com.sanedge.gateway.dto.CategoryDto;
+import com.sanedge.gateway.domain.requests.FindAllCategoriesRequest;
+import com.sanedge.gateway.domain.requests.GetCategoryMonthlyTotalRequest;
+import com.sanedge.gateway.domain.requests.GetCategoryMonthlyTotalByMerchantRequest;
 import io.smallrye.mutiny.Uni;
 
 public interface CategoryService {
-    Uni<CategoryDto.ApiResponsePaginationCategory> listCategories(int page, int size, String search);
+    Uni<CategoryDto.ApiResponsePaginationCategory> listCategories(FindAllCategoriesRequest request);
     Uni<CategoryDto.ApiResponseCategory> getCategory(int id);
-    Uni<CategoryDto.ApiResponsePaginationCategoryDeleteAt> getActiveCategories(int page, int size, String search);
-    Uni<CategoryDto.ApiResponsePaginationCategoryDeleteAt> getTrashedCategories(int page, int size, String search);
+    Uni<CategoryDto.ApiResponsePaginationCategoryDeleteAt> getActiveCategories(FindAllCategoriesRequest request);
+    Uni<CategoryDto.ApiResponsePaginationCategoryDeleteAt> getTrashedCategories(FindAllCategoriesRequest request);
     Uni<CategoryDto.ApiResponseCategory> createCategory(CategoryDto.CreateRequest body);
     Uni<CategoryDto.ApiResponseCategory> updateCategory(int id, CategoryDto.UpdateRequest body);
     Uni<CategoryDto.ApiResponseCategoryDeleteAt> deleteCategory(int id);
@@ -19,9 +22,9 @@ public interface CategoryService {
     // Stats
     Uni<CategoryDto.ApiResponseCategoryMonthlyTotalPrice> getMonthlyTotalPrices(int year, int month);
     Uni<CategoryDto.ApiResponseCategoryYearlyTotalPrice> getYearlyTotalPrices(int year);
-    Uni<CategoryDto.ApiResponseCategoryMonthlyTotalPrice> getMonthlyTotalPricesById(int categoryId, int year, int month);
+    Uni<CategoryDto.ApiResponseCategoryMonthlyTotalPrice> getMonthlyTotalPricesById(GetCategoryMonthlyTotalRequest request);
     Uni<CategoryDto.ApiResponseCategoryYearlyTotalPrice> getYearlyTotalPricesById(int categoryId, int year);
-    Uni<CategoryDto.ApiResponseCategoryMonthlyTotalPrice> getMonthlyTotalPricesByMerchant(int merchantId, int year, int month);
+    Uni<CategoryDto.ApiResponseCategoryMonthlyTotalPrice> getMonthlyTotalPricesByMerchant(GetCategoryMonthlyTotalByMerchantRequest request);
     Uni<CategoryDto.ApiResponseCategoryYearlyTotalPrice> getYearlyTotalPricesByMerchant(int merchantId, int year);
     Uni<CategoryDto.ApiResponseCategoryMonthPrice> getMonthlyPrices(int year);
     Uni<CategoryDto.ApiResponseCategoryYearPrice> getYearlyPrices(int year);

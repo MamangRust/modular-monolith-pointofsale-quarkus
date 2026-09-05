@@ -22,9 +22,19 @@
             <artifactId>lombok</artifactId>
         </dependency>
         <!-- Quarkus Redis Client -->
+        <!-- quarkus-devservices dikecualikan karena DevServicesRedisProcessor
+             (dari quarkus-redis-client-deployment) membutuhkan org.junit.rules
+             .TestRule saat quarkus:build dengan -DskipTests; junit:junit di
+             bawah menutup kebutuhan itu pada build classpath. -->
         <dependency>
             <groupId>io.quarkus</groupId>
             <artifactId>quarkus-redis-client</artifactId>
+            <exclusions>
+                <exclusion>
+                    <groupId>io.quarkus</groupId>
+                    <artifactId>quarkus-devservices</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
         <!-- Quarkus REST (JAX-RS API) -->
         <dependency>
@@ -47,6 +57,10 @@
             <groupId>com.google.protobuf</groupId>
             <artifactId>protobuf-java</artifactId>
         </dependency>
+         <dependency>
+            <groupId>org.yaml</groupId>
+            <artifactId>snakeyaml</artifactId>
+        </dependency>
         <dependency>
             <groupId>javax.annotation</groupId>
             <artifactId>javax.annotation-api</artifactId>
@@ -59,9 +73,30 @@
         <!-- <version>3.23.0</version> -->
       </dependency>
       <dependency>
-    <groupId>io.quarkus</groupId>
-    <artifactId>quarkus-grpc-stubs</artifactId>
-</dependency>
+        <groupId>io.quarkus</groupId>
+        <artifactId>quarkus-grpc-stubs</artifactId>
+      </dependency>
+      <dependency>
+        <groupId>io.quarkus</groupId>
+        <artifactId>quarkus-reactive-pg-client</artifactId>
+      </dependency>
+
+      <!-- Test Dependencies -->
+      <dependency>
+          <groupId>io.quarkus</groupId>
+          <artifactId>quarkus-junit5</artifactId>
+          <scope>test</scope>
+      </dependency>
+      <dependency>
+          <groupId>org.testcontainers</groupId>
+          <artifactId>testcontainers</artifactId>
+          <scope>test</scope>
+      </dependency>
+      <dependency>
+          <groupId>org.testcontainers</groupId>
+          <artifactId>postgresql</artifactId>
+          <scope>test</scope>
+      </dependency>
     </dependencies>
 
     <build>
@@ -73,6 +108,21 @@
             </extension>
         </extensions>
         <plugins>
+            <!-- Package src/test/java as a test-jar so consumer modules
+                 (auth, banner, ...) can reuse PostgreSqlResource, RedisResource,
+                 MockTracingMetrics, MockRedisService on their test classpath. -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-jar-plugin</artifactId>
+                <version>3.4.2</version>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>test-jar</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
             <plugin>
                 <groupId>io.smallrye</groupId>
                 <artifactId>jandex-maven-plugin</artifactId>

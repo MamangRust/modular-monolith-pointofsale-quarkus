@@ -1,14 +1,14 @@
 package com.sanedge.transaction.handler;
 
 import com.sanedge.transaction.service.TransactionQueryService;
-import io.grpc.Status;
+
+import com.sanedge.common.grpc.GrpcErrorMapper;
 import io.quarkus.grpc.GrpcService;
 import io.smallrye.mutiny.Uni;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import pb.transaction.MutinyTransactionQueryServiceGrpc;
 import pb.transaction.Transaction.ApiResponseTransaction;
-import pb.transaction.Transaction.ApiResponseTransactionDeleteAt;
 import pb.transaction.Transaction.ApiResponseTransactions;
 import pb.transaction.Transaction.FindByIdTransactionRequest;
 import pb.transaction.Transaction.TransactionResponse;
@@ -53,7 +53,7 @@ public class TransactionQueryGrpcHandler extends MutinyTransactionQueryServiceGr
                     }
                     return builder.build();
                 })
-                .onFailure().transform(e -> Status.INTERNAL.withDescription(e.getMessage()).asRuntimeException());
+                .onFailure().transform(GrpcErrorMapper::toStatusRuntimeException);
     }
 
     @Override
@@ -85,7 +85,7 @@ public class TransactionQueryGrpcHandler extends MutinyTransactionQueryServiceGr
                     }
                     return builder.build();
                 })
-                .onFailure().transform(e -> Status.INTERNAL.withDescription(e.getMessage()).asRuntimeException());
+                .onFailure().transform(GrpcErrorMapper::toStatusRuntimeException);
     }
 
     @Override
@@ -100,7 +100,7 @@ public class TransactionQueryGrpcHandler extends MutinyTransactionQueryServiceGr
                     }
                     return builder.build();
                 })
-                .onFailure().transform(e -> Status.INTERNAL.withDescription(e.getMessage()).asRuntimeException());
+                .onFailure().transform(GrpcErrorMapper::toStatusRuntimeException);
     }
 
     @Override
@@ -123,7 +123,7 @@ public class TransactionQueryGrpcHandler extends MutinyTransactionQueryServiceGr
                     }
                     return builder.build();
                 })
-                .onFailure().transform(e -> Status.INTERNAL.withDescription(e.getMessage()).asRuntimeException());
+                .onFailure().transform(GrpcErrorMapper::toStatusRuntimeException);
     }
 
     @Override
@@ -154,7 +154,7 @@ public class TransactionQueryGrpcHandler extends MutinyTransactionQueryServiceGr
                     }
                     return builder.build();
                 })
-                .onFailure().transform(e -> Status.INTERNAL.withDescription(e.getMessage()).asRuntimeException());
+                .onFailure().transform(GrpcErrorMapper::toStatusRuntimeException);
     }
 
     @Override
@@ -185,7 +185,7 @@ public class TransactionQueryGrpcHandler extends MutinyTransactionQueryServiceGr
                     }
                     return builder.build();
                 })
-                .onFailure().transform(e -> Status.INTERNAL.withDescription(e.getMessage()).asRuntimeException());
+                .onFailure().transform(GrpcErrorMapper::toStatusRuntimeException);
     }
 
     private TransactionResponse toProto(com.sanedge.transaction.domain.response.TransactionResponse r) {

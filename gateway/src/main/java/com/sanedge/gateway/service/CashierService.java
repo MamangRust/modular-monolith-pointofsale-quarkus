@@ -1,14 +1,18 @@
 package com.sanedge.gateway.service;
 
 import com.sanedge.gateway.dto.CashierDto;
+import com.sanedge.gateway.domain.requests.FindAllCashiersRequest;
+import com.sanedge.gateway.domain.requests.FindCashiersByMerchantRequest;
+import com.sanedge.gateway.domain.requests.GetCashierMonthlyTotalSalesRequest;
+import com.sanedge.gateway.domain.requests.GetCashierMonthlyTotalSalesByMerchantRequest;
 import io.smallrye.mutiny.Uni;
 
 public interface CashierService {
-    Uni<CashierDto.ApiResponsePaginationCashier> listCashiers(int page, int size, String search);
+    Uni<CashierDto.ApiResponsePaginationCashier> listCashiers(FindAllCashiersRequest request);
     Uni<CashierDto.ApiResponseCashier> getCashier(int id);
-    Uni<CashierDto.ApiResponsePaginationCashierDeleteAt> getActiveCashiers(int page, int size, String search);
-    Uni<CashierDto.ApiResponsePaginationCashierDeleteAt> getTrashedCashiers(int page, int size, String search);
-    Uni<CashierDto.ApiResponsePaginationCashier> getCashiersByMerchant(int merchantId, int page, int size, String search);
+    Uni<CashierDto.ApiResponsePaginationCashierDeleteAt> getActiveCashiers(FindAllCashiersRequest request);
+    Uni<CashierDto.ApiResponsePaginationCashierDeleteAt> getTrashedCashiers(FindAllCashiersRequest request);
+    Uni<CashierDto.ApiResponsePaginationCashier> getCashiersByMerchant(FindCashiersByMerchantRequest request);
     Uni<CashierDto.ApiResponseCashier> createCashier(CashierDto.CreateRequest body);
     Uni<CashierDto.ApiResponseCashier> updateCashier(int id, CashierDto.UpdateRequest body);
     Uni<CashierDto.ApiResponseCashierDeleteAt> deleteCashier(int id);
@@ -20,9 +24,9 @@ public interface CashierService {
     // Stats
     Uni<CashierDto.ApiResponseCashierMonthlyTotalSales> getMonthlyTotalSales(int year, int month);
     Uni<CashierDto.ApiResponseCashierYearlyTotalSales> getYearlyTotalSales(int year);
-    Uni<CashierDto.ApiResponseCashierMonthlyTotalSales> getMonthlyTotalSalesById(int cashierId, int year, int month);
+    Uni<CashierDto.ApiResponseCashierMonthlyTotalSales> getMonthlyTotalSalesById(GetCashierMonthlyTotalSalesRequest request);
     Uni<CashierDto.ApiResponseCashierYearlyTotalSales> getYearlyTotalSalesById(int cashierId, int year);
-    Uni<CashierDto.ApiResponseCashierMonthlyTotalSales> getMonthlyTotalSalesByMerchant(int merchantId, int year, int month);
+    Uni<CashierDto.ApiResponseCashierMonthlyTotalSales> getMonthlyTotalSalesByMerchant(GetCashierMonthlyTotalSalesByMerchantRequest request);
     Uni<CashierDto.ApiResponseCashierYearlyTotalSales> getYearlyTotalSalesByMerchant(int merchantId, int year);
     
     Uni<CashierDto.ApiResponseCashierMonthSales> getMonthlySales(int year);

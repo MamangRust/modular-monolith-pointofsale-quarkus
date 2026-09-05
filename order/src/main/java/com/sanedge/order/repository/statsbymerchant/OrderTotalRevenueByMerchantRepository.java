@@ -3,6 +3,7 @@ package com.sanedge.order.repository.statsbymerchant;
 import java.util.ArrayList;
 import java.util.List;
 
+import com.sanedge.order.domain.requests.FindOrderMonthMerchantRange;
 import com.sanedge.order.entity.Order;
 import com.sanedge.order.entity.OrderMonthTotalRevenue;
 import com.sanedge.order.entity.OrderYearTotalRevenue;
@@ -15,7 +16,7 @@ import jakarta.enterprise.context.ApplicationScoped;
 @ApplicationScoped
 public class OrderTotalRevenueByMerchantRepository implements PanacheRepository<Order> {
 
-    public Uni<List<OrderMonthTotalRevenue>> findMonthlyTotalRevenueByMerchant(Long merchantId, Integer year1, Integer month1, Integer year2, Integer month2) {
+    public Uni<List<OrderMonthTotalRevenue>> findMonthlyTotalRevenueByMerchant(FindOrderMonthMerchantRange req) {
         String sql = """
             WITH monthly_revenue AS (
                 SELECT
@@ -37,9 +38,9 @@ public class OrderTotalRevenueByMerchantRepository implements PanacheRepository<
                 GROUP BY CAST(EXTRACT(YEAR FROM o.created_at) AS INTEGER), CAST(EXTRACT(MONTH FROM o.created_at) AS INTEGER)
             ),
             all_months AS (
-                SELECT CAST(:year1 AS VARCHAR) AS year, CAST(:month1 AS INTEGER) AS month, TO_CHAR(TO_DATE(CAST(:month1 AS VARCHAR), 'MM'), 'FMMonth') AS month_name
+                SELECT CAST(CAST(:year1 AS INTEGER) AS VARCHAR) AS year, CAST(:month1 AS INTEGER) AS month, TO_CHAR(TO_DATE(CAST(CAST(:month1 AS INTEGER) AS VARCHAR), 'MM'), 'FMMonth') AS month_name
                 UNION
-                SELECT CAST(:year2 AS VARCHAR) AS year, CAST(:month2 AS INTEGER) AS month, TO_CHAR(TO_DATE(CAST(:month2 AS VARCHAR), 'MM'), 'FMMonth') AS month_name
+                SELECT CAST(CAST(:year2 AS INTEGER) AS VARCHAR) AS year, CAST(:month2 AS INTEGER) AS month, TO_CHAR(TO_DATE(CAST(CAST(:month2 AS INTEGER) AS VARCHAR), 'MM'), 'FMMonth') AS month_name
             )
             SELECT
                 am.year AS year,
@@ -57,11 +58,11 @@ public class OrderTotalRevenueByMerchantRepository implements PanacheRepository<
 
         return Panache.getSession()
                 .chain(session -> session.createNativeQuery(sql)
-                        .setParameter("merchantId", merchantId)
-                        .setParameter("year1", year1)
-                        .setParameter("month1", month1)
-                        .setParameter("year2", year2)
-                        .setParameter("month2", month2)
+                        .setParameter("merchantId", req.getMerchantId())
+                        .setParameter("year1", req.getStartYear())
+                        .setParameter("month1", req.getStartMonth())
+                        .setParameter("year2", req.getEndYear())
+                        .setParameter("month2", req.getEndMonth())
                         .getResultList())
                 .map(rawList -> {
                     List<OrderMonthTotalRevenue> list = new ArrayList<>();
