@@ -7,23 +7,26 @@ import org.junit.jupiter.api.Test;
 
 import com.sanedge.cashier.domain.requests.FindCashierMonthSalesByMerchant;
 
-import io.quarkus.hibernate.reactive.panache.common.WithSession;
 import io.quarkus.test.junit.QuarkusTest;
-import io.quarkus.test.vertx.RunOnVertxContext;
+import io.quarkus.test.TestReactiveTransaction;
+import io.quarkus.test.vertx.UniAsserter;
 import io.smallrye.mutiny.Uni;
 import jakarta.inject.Inject;
+import com.sanedge.common.test.PostgreSqlResource;
+import io.quarkus.test.common.QuarkusTestResource;
 
 @Disabled("Requires PostgreSQL-specific functions; enable after verifying DB compatibility")
 @QuarkusTest
-@RunOnVertxContext
+@QuarkusTestResource(PostgreSqlResource.class)
+@TestReactiveTransaction
 class CashierSalesByMerchantRepositoryTest {
 
     @Inject
     CashierSalesByMerchantRepository repository;
 
     @Test
-    @WithSession
-    Uni<Void> testFindMonthSalesByMerchant_ReturnsEmptyWhenNoData() {
+    void testFindMonthSalesByMerchant_ReturnsEmptyWhenNoData(UniAsserter asserter) {
+        asserter.execute(() -> {
         FindCashierMonthSalesByMerchant req = new FindCashierMonthSalesByMerchant();
         req.setMerchantId(999999L);
         req.setYear(2024);
@@ -36,16 +39,15 @@ class CashierSalesByMerchantRepositoryTest {
                     assertThat(result).isEmpty();
                 })
                 .replaceWithVoid();
-    }
+    });}
 
     @Test
-    @WithSession
-    Uni<Void> testFindYearSalesByMerchant_ReturnsEmptyWhenNoData() {
-        return repository.findYearSalesByMerchant(999999L, 2024)
+    void testFindYearSalesByMerchant_ReturnsEmptyWhenNoData(UniAsserter asserter) {
+        asserter.execute(() -> repository.findYearSalesByMerchant(999999L, 2024)
                 .invoke(result -> {
                     assertThat(result).isNotNull();
                     assertThat(result).isEmpty();
                 })
-                .replaceWithVoid();
+                .replaceWithVoid());
     }
 }

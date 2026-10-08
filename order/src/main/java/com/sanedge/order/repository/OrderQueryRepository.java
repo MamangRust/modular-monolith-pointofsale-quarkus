@@ -1,5 +1,7 @@
 package com.sanedge.order.repository;
 
+import com.sanedge.common.repository.PagedQuery;
+
 import com.sanedge.order.domain.requests.FindAllOrderByMerchantRequest;
 import com.sanedge.order.domain.requests.FindAllOrderRequest;
 import com.sanedge.common.domain.response.PagedResult;
@@ -27,9 +29,7 @@ public class OrderQueryRepository implements PanacheRepository<Order> {
         var panacheQuery = find(query, searchKeyword)
                 .page(pageIndex, size);
 
-        return Uni.combine().all().unis(panacheQuery.list(), panacheQuery.count())
-                .asTuple()
-                .map(tuple -> new PagedResult<>(tuple.getItem1(), tuple.getItem2().intValue()));
+        return PagedQuery.fetch(panacheQuery);
     }
 
     public Uni<PagedResult<Order>> findOrdersByMerchant(FindAllOrderByMerchantRequest req) {
@@ -49,9 +49,7 @@ public class OrderQueryRepository implements PanacheRepository<Order> {
         var panacheQuery = find(query, merchantId, searchKeyword)
                 .page(pageIndex, size);
 
-        return Uni.combine().all().unis(panacheQuery.list(), panacheQuery.count())
-                .asTuple()
-                .map(tuple -> new PagedResult<>(tuple.getItem1(), tuple.getItem2().intValue()));
+        return PagedQuery.fetch(panacheQuery);
     }
 
     public Uni<PagedResult<Order>> findActiveOrders(FindAllOrderRequest req) {
@@ -70,9 +68,7 @@ public class OrderQueryRepository implements PanacheRepository<Order> {
         var panacheQuery = find(query, searchKeyword)
                 .page(pageIndex, size);
 
-        return Uni.combine().all().unis(panacheQuery.list(), panacheQuery.count())
-                .asTuple()
-                .map(tuple -> new PagedResult<>(tuple.getItem1(), tuple.getItem2().intValue()));
+        return PagedQuery.fetch(panacheQuery);
     }
 
     public Uni<Order> findOrderById(Long orderId) {
@@ -95,8 +91,6 @@ public class OrderQueryRepository implements PanacheRepository<Order> {
         var panacheQuery = find(query, searchKeyword)
                 .page(pageIndex, size);
 
-        return Uni.combine().all().unis(panacheQuery.list(), panacheQuery.count())
-                .asTuple()
-                .map(tuple -> new PagedResult<>(tuple.getItem1(), tuple.getItem2().intValue()));
+        return PagedQuery.fetch(panacheQuery);
     }
 }

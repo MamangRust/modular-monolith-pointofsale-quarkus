@@ -1,4 +1,4 @@
-package com.sanedge.merchant.entity;
+package com.sanedge.common.entity;
 
 import java.sql.Timestamp;
 
@@ -10,10 +10,23 @@ import jakarta.persistence.PreUpdate;
 import lombok.Getter;
 import lombok.Setter;
 
+/**
+ * Single shared Panache base for every entity: the audit timestamps
+ * ({@code created_at}, {@code updated_at}, {@code deleted_at}) and their
+ * lifecycle callbacks.
+ *
+ * <p>It deliberately declares <b>no</b> identifier so the same superclass fits
+ * every primary-key shape. Entities with a surrogate key declare
+ * {@code @Id @GeneratedValue(strategy = GenerationType.IDENTITY) public Long id}
+ * (optionally with {@code @Column} to rename the key column), while entities
+ * with a natural/custom key declare their own {@code @Id}
+ * (e.g. {@code Merchant#merchantId}, {@code MerchantDocument#documentId}).</p>
+ */
 @Getter
 @Setter
 @MappedSuperclass
 public class BaseModel extends PanacheEntityBase {
+
     @Column(name = "created_at")
     private Timestamp createdAt;
 

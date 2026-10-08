@@ -32,20 +32,17 @@ public class OrderItemQueryGrpcHandler extends MutinyOrderItemServiceGrpc.OrderI
         return orderItemQueryService.findAll(req)
                 .map(apiRes -> {
                     if ("success".equals(apiRes.status()) && apiRes.data() != null) {
-                        var pagedData = apiRes.data();
-                        var pbList = pagedData.getData().stream()
+                        var list = apiRes.data();
+                        var pbList = list.stream()
                                 .map(this::mapResponse)
                                 .collect(Collectors.toList());
 
-                        int totalRecords = pagedData.getTotalRecords();
-                        int pageSize = request.getPageSize() > 0 ? request.getPageSize() : 1;
-                        int totalPages = (int) Math.ceil((double) totalRecords / pageSize);
-
+                        var pagination = apiRes.pagination();
                         var meta = PaginationMeta.newBuilder()
-                                .setCurrentPage(request.getPage())
-                                .setPageSize(request.getPageSize())
-                                .setTotalPages(totalPages)
-                                .setTotalRecords(totalRecords)
+                                .setCurrentPage(pagination.currentPage())
+                                .setPageSize(pagination.pageSize())
+                                .setTotalPages(pagination.totalPages())
+                                .setTotalRecords(pagination.totalRecords())
                                 .build();
 
                         return ApiResponsePaginationOrderItem.newBuilder()
@@ -77,20 +74,17 @@ public class OrderItemQueryGrpcHandler extends MutinyOrderItemServiceGrpc.OrderI
         return orderItemQueryService.findByActive(req)
                 .map(apiRes -> {
                     if ("success".equals(apiRes.status()) && apiRes.data() != null) {
-                        var pagedData = apiRes.data();
-                        var pbList = pagedData.getData().stream()
+                        var list = apiRes.data();
+                        var pbList = list.stream()
                                 .map(this::mapResponseDeleteAt)
                                 .collect(Collectors.toList());
 
-                        int totalRecords = pagedData.getTotalRecords();
-                        int pageSize = request.getPageSize() > 0 ? request.getPageSize() : 1;
-                        int totalPages = (int) Math.ceil((double) totalRecords / pageSize);
-
+                        var pagination = apiRes.pagination();
                         var meta = PaginationMeta.newBuilder()
-                                .setCurrentPage(request.getPage())
-                                .setPageSize(request.getPageSize())
-                                .setTotalPages(totalPages)
-                                .setTotalRecords(totalRecords)
+                                .setCurrentPage(pagination.currentPage())
+                                .setPageSize(pagination.pageSize())
+                                .setTotalPages(pagination.totalPages())
+                                .setTotalRecords(pagination.totalRecords())
                                 .build();
 
                         return ApiResponsePaginationOrderItemDeleteAt.newBuilder()
@@ -122,20 +116,17 @@ public class OrderItemQueryGrpcHandler extends MutinyOrderItemServiceGrpc.OrderI
         return orderItemQueryService.findByTrashed(req)
                 .map(apiRes -> {
                     if ("success".equals(apiRes.status()) && apiRes.data() != null) {
-                        var pagedData = apiRes.data();
-                        var pbList = pagedData.getData().stream()
+                        var list = apiRes.data();
+                        var pbList = list.stream()
                                 .map(this::mapResponseDeleteAt)
                                 .collect(Collectors.toList());
 
-                        int totalRecords = pagedData.getTotalRecords();
-                        int pageSize = request.getPageSize() > 0 ? request.getPageSize() : 1;
-                        int totalPages = (int) Math.ceil((double) totalRecords / pageSize);
-
+                        var pagination = apiRes.pagination();
                         var meta = PaginationMeta.newBuilder()
-                                .setCurrentPage(request.getPage())
-                                .setPageSize(request.getPageSize())
-                                .setTotalPages(totalPages)
-                                .setTotalRecords(totalRecords)
+                                .setCurrentPage(pagination.currentPage())
+                                .setPageSize(pagination.pageSize())
+                                .setTotalPages(pagination.totalPages())
+                                .setTotalRecords(pagination.totalRecords())
                                 .build();
 
                         return ApiResponsePaginationOrderItemDeleteAt.newBuilder()

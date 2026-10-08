@@ -1,5 +1,7 @@
 package com.sanedge.user.repository;
 
+import com.sanedge.common.repository.PagedQuery;
+
 import java.sql.Timestamp;
 import java.time.LocalDateTime;
 
@@ -33,9 +35,7 @@ public class UserRepository implements PanacheRepository<User> {
         var panacheQuery = find(query, keyword)
                 .page(page, size);
 
-        return Uni.combine().all().unis(panacheQuery.list(), panacheQuery.count())
-                .asTuple()
-                .map(tuple -> new PagedResult<>(tuple.getItem1(), tuple.getItem2().intValue()));
+        return PagedQuery.fetch(panacheQuery);
     }
 
     public Uni<PagedResult<User>> findActiveUsers(FindAllUsers req) {
@@ -56,9 +56,7 @@ public class UserRepository implements PanacheRepository<User> {
         var panacheQuery = find(query, keyword)
                 .page(page, size);
 
-        return Uni.combine().all().unis(panacheQuery.list(), panacheQuery.count())
-                .asTuple()
-                .map(tuple -> new PagedResult<>(tuple.getItem1(), tuple.getItem2().intValue()));
+        return PagedQuery.fetch(panacheQuery);
     }
 
     public Uni<PagedResult<User>> findTrashedUsers(FindAllUsers req) {
@@ -79,9 +77,7 @@ public class UserRepository implements PanacheRepository<User> {
         var panacheQuery = find(query, keyword)
                 .page(page, size);
 
-        return Uni.combine().all().unis(panacheQuery.list(), panacheQuery.count())
-                .asTuple()
-                .map(tuple -> new PagedResult<>(tuple.getItem1(), tuple.getItem2().intValue()));
+        return PagedQuery.fetch(panacheQuery);
     }
 
     public Uni<User> findById(Integer id) {

@@ -1,5 +1,7 @@
 package com.sanedge.role.repository;
 
+import com.sanedge.common.repository.PagedQuery;
+
 import java.sql.Timestamp;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -27,9 +29,7 @@ public class RoleRepository implements PanacheRepository<Role> {
         var panacheQuery = find(query, keyword)
                 .page(pageIndex, req.getPageSize());
 
-        return Uni.combine().all().unis(panacheQuery.list(), panacheQuery.count())
-                .asTuple()
-                .map(tuple -> new PagedResult<>(tuple.getItem1(), tuple.getItem2().intValue()));
+        return PagedQuery.fetch(panacheQuery);
     }
 
     public Uni<PagedResult<Role>> findActiveRoles(FindAllRoles req) {
@@ -46,9 +46,7 @@ public class RoleRepository implements PanacheRepository<Role> {
         var panacheQuery = find(query, keyword)
                 .page(pageIndex, req.getPageSize());
 
-        return Uni.combine().all().unis(panacheQuery.list(), panacheQuery.count())
-                .asTuple()
-                .map(tuple -> new PagedResult<>(tuple.getItem1(), tuple.getItem2().intValue()));
+        return PagedQuery.fetch(panacheQuery);
     }
 
     public Uni<PagedResult<Role>> findTrashedRoles(FindAllRoles req) {
@@ -65,9 +63,7 @@ public class RoleRepository implements PanacheRepository<Role> {
         var panacheQuery = find(query, keyword)
                 .page(pageIndex, req.getPageSize());
 
-        return Uni.combine().all().unis(panacheQuery.list(), panacheQuery.count())
-                .asTuple()
-                .map(tuple -> new PagedResult<>(tuple.getItem1(), tuple.getItem2().intValue()));
+        return PagedQuery.fetch(panacheQuery);
     }
 
     public Uni<Role> findByRoleName(String roleName) {
@@ -78,8 +74,8 @@ public class RoleRepository implements PanacheRepository<Role> {
         return find("""
                     SELECT r
                     FROM Role r
-                    JOIN UserRole ur ON ur.role.roleId = r.roleId
-                    WHERE ur.user.userId = ?1
+                    JOIN UserRole ur ON ur.role.id = r.id
+                    WHERE ur.userId = ?1
                     ORDER BY r.createdAt ASC
                 """, userId).list();
     }
@@ -88,7 +84,7 @@ public class RoleRepository implements PanacheRepository<Role> {
     public Uni<Role> trash(Long roleId) {
         return findById(roleId)
                 .chain(role -> {
-                    if (role != null) {
+                    if (role != null && role.getDeletedAt() == null) {
                         LocalDateTime date = LocalDateTime.now();
                         role.setDeletedAt(Timestamp.valueOf(date));
                         return persist(role).map(v -> role);
@@ -99,7 +95,7 @@ public class RoleRepository implements PanacheRepository<Role> {
 
     @WithTransaction
     public Uni<Role> restore(Long roleId) {
-        return find("roleId = ?1 AND deletedAt IS NOT NULL", roleId).firstResult()
+        return find("id = ?1 AND deletedAt IS NOT NULL", roleId).firstResult()
                 .chain(role -> {
                     if (role != null) {
                         role.setDeletedAt(null);
@@ -111,7 +107,7 @@ public class RoleRepository implements PanacheRepository<Role> {
 
     @WithTransaction
     public Uni<Role> deletePermanent(Long roleId) {
-        return findById(roleId)
+        return find("id = ?1 AND deletedAt IS NOT NULL", roleId).firstResult()
                 .chain(role -> {
                     if (role != null) {
                         return delete(role).map(v -> role);

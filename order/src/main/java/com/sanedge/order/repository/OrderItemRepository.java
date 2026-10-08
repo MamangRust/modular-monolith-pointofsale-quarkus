@@ -1,5 +1,7 @@
 package com.sanedge.order.repository;
 
+import com.sanedge.common.repository.PagedQuery;
+
 import java.sql.Timestamp;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -86,9 +88,7 @@ public class OrderItemRepository implements PanacheRepository<OrderItem> {
         var panacheQuery = find(query, searchKeyword)
                 .page(pageIndex, size);
 
-        return Uni.combine().all().unis(panacheQuery.list(), panacheQuery.count())
-                .asTuple()
-                .map(tuple -> new PagedResult<>(tuple.getItem1(), tuple.getItem2().intValue()));
+        return PagedQuery.fetch(panacheQuery);
     }
 
     public Uni<PagedResult<OrderItem>> findActiveOrderItems(String keyword, int page, int size) {
@@ -107,9 +107,7 @@ public class OrderItemRepository implements PanacheRepository<OrderItem> {
         var panacheQuery = find(query, searchKeyword)
                 .page(pageIndex, size);
 
-        return Uni.combine().all().unis(panacheQuery.list(), panacheQuery.count())
-                .asTuple()
-                .map(tuple -> new PagedResult<>(tuple.getItem1(), tuple.getItem2().intValue()));
+        return PagedQuery.fetch(panacheQuery);
     }
 
     public Uni<PagedResult<OrderItem>> findTrashedOrderItems(String keyword, int page, int size) {
@@ -128,9 +126,7 @@ public class OrderItemRepository implements PanacheRepository<OrderItem> {
         var panacheQuery = find(query, searchKeyword)
                 .page(pageIndex, size);
 
-        return Uni.combine().all().unis(panacheQuery.list(), panacheQuery.count())
-                .asTuple()
-                .map(tuple -> new PagedResult<>(tuple.getItem1(), tuple.getItem2().intValue()));
+        return PagedQuery.fetch(panacheQuery);
     }
 }
 

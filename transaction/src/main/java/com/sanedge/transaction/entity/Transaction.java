@@ -1,10 +1,14 @@
 package com.sanedge.transaction.entity;
 
+import com.sanedge.common.entity.BaseModel;
+
 import com.sanedge.common.enums.PaymentStatus;
 
-import jakarta.persistence.AttributeOverride;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.Table;
@@ -19,8 +23,12 @@ import lombok.NoArgsConstructor;
 @Entity
 @EqualsAndHashCode(callSuper = true)
 @Table(name = "transactions")
-@AttributeOverride(name = "id", column = @Column(name = "transaction_id"))
 public class Transaction extends BaseModel {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column(name = "transaction_id")
+    public Long id;
 
     @Column(name = "order_id", nullable = false)
     private Long orderId;

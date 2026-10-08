@@ -12,14 +12,17 @@ import com.sanedge.common.enums.Status;
 import com.sanedge.merchant.domain.requests.FindAllMerchants;
 import com.sanedge.merchant.entity.Merchant;
 
-import io.quarkus.hibernate.reactive.panache.common.WithTransaction;
 import io.quarkus.test.junit.QuarkusTest;
-import io.quarkus.test.vertx.RunOnVertxContext;
+import io.quarkus.test.TestReactiveTransaction;
+import io.quarkus.test.vertx.UniAsserter;
 import io.smallrye.mutiny.Uni;
 import jakarta.inject.Inject;
+import com.sanedge.common.test.PostgreSqlResource;
+import io.quarkus.test.common.QuarkusTestResource;
 
 @QuarkusTest
-@RunOnVertxContext
+@QuarkusTestResource(PostgreSqlResource.class)
+@TestReactiveTransaction
 class MerchantRepositoryTest {
 
     @Inject
@@ -63,9 +66,8 @@ class MerchantRepositoryTest {
     // ==================== Basic CRUD ====================
 
     @Test
-    @WithTransaction
-    Uni<Void> testCreateAndFindById() {
-        return clean()
+    void testCreateAndFindById(UniAsserter asserter) {
+        asserter.execute(() -> clean()
                 .chain(() -> persistMerchant("Merchant One", "key-001"))
                 .chain(m -> queryRepo.findMerchantById(m.getMerchantId()))
                 .invoke(found -> {
@@ -74,69 +76,63 @@ class MerchantRepositoryTest {
                     assertThat(found.getApiKey()).isEqualTo("key-001");
                     assertThat(found.getDeletedAt()).isNull();
                 })
-                .replaceWithVoid();
+                .replaceWithVoid());
     }
 
     @Test
-    @WithTransaction
-    Uni<Void> testFindByIdReturnsNullWhenNotFound() {
-        return clean()
+    void testFindByIdReturnsNullWhenNotFound(UniAsserter asserter) {
+        asserter.execute(() -> clean()
                 .chain(() -> queryRepo.findMerchantById(99999L))
                 .invoke(found -> assertThat(found).isNull())
-                .replaceWithVoid();
+                .replaceWithVoid());
     }
 
     @Test
-    @WithTransaction
-    Uni<Void> testFindByApiKey() {
-        return clean()
+    void testFindByApiKey(UniAsserter asserter) {
+        asserter.execute(() -> clean()
                 .chain(() -> persistMerchant("Api Merchant", "secret-key"))
                 .chain(() -> queryRepo.findByApiKey("secret-key"))
                 .invoke(found -> {
                     assertThat(found).isNotNull();
                     assertThat(found.getApiKey()).isEqualTo("secret-key");
                 })
-                .replaceWithVoid();
+                .replaceWithVoid());
     }
 
     @Test
-    @WithTransaction
-    Uni<Void> testFindByName() {
-        return clean()
+    void testFindByName(UniAsserter asserter) {
+        asserter.execute(() -> clean()
                 .chain(() -> persistMerchant("Unique Name", "key"))
                 .chain(() -> queryRepo.findByName("Unique Name"))
                 .invoke(found -> {
                     assertThat(found).isNotNull();
                     assertThat(found.getName()).isEqualTo("Unique Name");
                 })
-                .replaceWithVoid();
+                .replaceWithVoid());
     }
 
     @Test
-    @WithTransaction
-    Uni<Void> testExistsByNameTrue() {
-        return clean()
+    void testExistsByNameTrue(UniAsserter asserter) {
+        asserter.execute(() -> clean()
                 .chain(() -> persistMerchant("Exists", "k1"))
                 .chain(() -> queryRepo.existsByName("Exists"))
                 .invoke(exists -> assertThat(exists).isTrue())
-                .replaceWithVoid();
+                .replaceWithVoid());
     }
 
     @Test
-    @WithTransaction
-    Uni<Void> testExistsByNameFalse() {
-        return clean()
+    void testExistsByNameFalse(UniAsserter asserter) {
+        asserter.execute(() -> clean()
                 .chain(() -> queryRepo.existsByName("NonExistent"))
                 .invoke(exists -> assertThat(exists).isFalse())
-                .replaceWithVoid();
+                .replaceWithVoid());
     }
 
     // ==================== Query - Search & Pagination ====================
 
     @Test
-    @WithTransaction
-    Uni<Void> testFindMerchantsWithSearch() {
-        return clean()
+    void testFindMerchantsWithSearch(UniAsserter asserter) {
+        asserter.execute(() -> clean()
                 .chain(() -> persistMerchant("Alpha Store", "key-a"))
                 .chain(() -> persistMerchant("Beta Shop", "key-b"))
                 .chain(() -> persistMerchant("Gamma Market", "key-c"))
@@ -145,13 +141,12 @@ class MerchantRepositoryTest {
                     assertThat(result.getTotalRecords()).isEqualTo(1);
                     assertThat(result.getData().get(0).getName()).isEqualTo("Beta Shop");
                 })
-                .replaceWithVoid();
+                .replaceWithVoid());
     }
 
     @Test
-    @WithTransaction
-    Uni<Void> testFindMerchantsPagination() {
-        return clean()
+    void testFindMerchantsPagination(UniAsserter asserter) {
+        asserter.execute(() -> clean()
                 .chain(() -> persistMerchant("A", "a"))
                 .chain(() -> persistMerchant("B", "b"))
                 .chain(() -> persistMerchant("C", "c"))
@@ -164,27 +159,25 @@ class MerchantRepositoryTest {
                 })
                 .chain(() -> queryRepo.findMerchants(findAllReq(3, 2, "")))
                 .invoke(page3 -> assertThat(page3.getData()).hasSize(1))
-                .replaceWithVoid();
+                .replaceWithVoid());
     }
 
     // ==================== Active / Trashed filters ====================
 
     @Test
-    @WithTransaction
-    Uni<Void> testFindActiveMerchantsExcludesTrashed() {
-        return clean()
+    void testFindActiveMerchantsExcludesTrashed(UniAsserter asserter) {
+        asserter.execute(() -> clean()
                 .chain(() -> persistMerchant("Active", "a"))
                 .chain(() -> persistMerchant("ToTrash", "t")
                         .chain(m -> commandRepo.trashed(m.getMerchantId()).replaceWithVoid()))
                 .chain(() -> queryRepo.findActiveMerchants(findAllReq(1, 10, "")))
                 .invoke(result -> assertThat(result.getTotalRecords()).isEqualTo(1))
-                .replaceWithVoid();
+                .replaceWithVoid());
     }
 
     @Test
-    @WithTransaction
-    Uni<Void> testFindTrashedMerchantsOnlyTrashed() {
-        return clean()
+    void testFindTrashedMerchantsOnlyTrashed(UniAsserter asserter) {
+        asserter.execute(() -> clean()
                 .chain(() -> persistMerchant("Stay", "s"))
                 .chain(() -> persistMerchant("TrashMe", "t")
                         .chain(m -> commandRepo.trashed(m.getMerchantId()).replaceWithVoid()))
@@ -193,39 +186,36 @@ class MerchantRepositoryTest {
                     assertThat(result.getTotalRecords()).isEqualTo(1);
                     assertThat(result.getData().get(0).getName()).isEqualTo("TrashMe");
                 })
-                .replaceWithVoid();
+                .replaceWithVoid());
     }
 
     // ==================== Soft Delete (Trash) ====================
 
     @Test
-    @WithTransaction
-    Uni<Void> testTrashMerchant() {
-        return clean()
+    void testTrashMerchant(UniAsserter asserter) {
+        asserter.execute(() -> clean()
                 .chain(() -> persistMerchant("Trash", "tk"))
                 .chain(m -> commandRepo.trashed(m.getMerchantId()))
                 .invoke(trashed -> {
                     assertThat(trashed).isNotNull();
                     assertThat(trashed.getDeletedAt()).isNotNull();
                 })
-                .replaceWithVoid();
+                .replaceWithVoid());
     }
 
     @Test
-    @WithTransaction
-    Uni<Void> testTrashAlreadyTrashedReturnsNull() {
-        return clean()
+    void testTrashAlreadyTrashedReturnsNull(UniAsserter asserter) {
+        asserter.execute(() -> clean()
                 .chain(() -> persistMerchant("Double", "dk"))
                 .chain(m -> commandRepo.trashed(m.getMerchantId())
                         .chain(() -> commandRepo.trashed(m.getMerchantId())))
                 .invoke(second -> assertThat(second).isNull())
-                .replaceWithVoid();
+                .replaceWithVoid());
     }
 
     @Test
-    @WithTransaction
-    Uni<Void> testRestoreMerchant() {
-        return clean()
+    void testRestoreMerchant(UniAsserter asserter) {
+        asserter.execute(() -> clean()
                 .chain(() -> persistMerchant("Restore", "rk"))
                 .chain(m -> commandRepo.trashed(m.getMerchantId())
                         .chain(() -> commandRepo.restore(m.getMerchantId())))
@@ -233,62 +223,57 @@ class MerchantRepositoryTest {
                     assertThat(restored).isNotNull();
                     assertThat(restored.getDeletedAt()).isNull();
                 })
-                .replaceWithVoid();
+                .replaceWithVoid());
     }
 
     @Test
-    @WithTransaction
-    Uni<Void> testRestoreNotTrashedReturnsNull() {
-        return clean()
+    void testRestoreNotTrashedReturnsNull(UniAsserter asserter) {
+        asserter.execute(() -> clean()
                 .chain(() -> persistMerchant("ActiveR", "ark"))
                 .chain(m -> commandRepo.restore(m.getMerchantId()))
                 .invoke(result -> assertThat(result).isNull())
-                .replaceWithVoid();
+                .replaceWithVoid());
     }
 
     // ==================== Permanent Delete ====================
 
     @Test
-    @WithTransaction
-    Uni<Void> testDeletePermanentAfterTrash() {
-        return clean()
+    void testDeletePermanentAfterTrash(UniAsserter asserter) {
+        asserter.execute(() -> clean()
                 .chain(() -> persistMerchant("DelPerm", "dp"))
                 .chain(m -> commandRepo.trashed(m.getMerchantId())
                         .chain(() -> commandRepo.deletePermanent(m.getMerchantId()))
                         .chain(success -> queryRepo.findMerchantById(m.getMerchantId())))
                 .invoke(found -> assertThat(found).isNull())
-                .replaceWithVoid();
+                .replaceWithVoid());
     }
 
     @Test
-    @WithTransaction
-    Uni<Void> testDeletePermanentActiveReturnsFalse() {
-        return clean()
+    void testDeletePermanentActiveReturnsFalse(UniAsserter asserter) {
+        asserter.execute(() -> clean()
                 .chain(() -> persistMerchant("ActiveDel", "ad"))
                 .chain(m -> commandRepo.deletePermanent(m.getMerchantId()))
                 .invoke(result -> assertThat(result).isFalse())
-                .replaceWithVoid();
+                .replaceWithVoid());
     }
 
     // ==================== Bulk Operations ====================
 
     @Test
-    @WithTransaction
-    Uni<Void> testRestoreAllDeleted() {
-        return clean()
+    void testRestoreAllDeleted(UniAsserter asserter) {
+        asserter.execute(() -> clean()
                 .chain(() -> persistMerchant("A1", "a1").chain(m -> commandRepo.trashed(m.getMerchantId()).replaceWithVoid()))
                 .chain(() -> persistMerchant("A2", "a2").chain(m -> commandRepo.trashed(m.getMerchantId()).replaceWithVoid()))
                 .chain(() -> commandRepo.restoreAllDeleted())
                 .invoke(result -> assertThat(result).isTrue())
                 .chain(() -> queryRepo.findTrashedMerchants(findAllReq(1, 10, "")))
                 .invoke(trashed -> assertThat(trashed.getTotalRecords()).isEqualTo(0))
-                .replaceWithVoid();
+                .replaceWithVoid());
     }
 
     @Test
-    @WithTransaction
-    Uni<Void> testDeleteAllDeleted() {
-        return clean()
+    void testDeleteAllDeleted(UniAsserter asserter) {
+        asserter.execute(() -> clean()
                 .chain(() -> persistMerchant("D1", "d1").chain(m -> commandRepo.trashed(m.getMerchantId()).replaceWithVoid()))
                 .chain(() -> persistMerchant("D2", "d2").chain(m -> commandRepo.trashed(m.getMerchantId()).replaceWithVoid()))
                 .chain(() -> persistMerchant("Keep", "keep"))
@@ -296,76 +281,70 @@ class MerchantRepositoryTest {
                 .invoke(result -> assertThat(result).isTrue())
                 .chain(() -> queryRepo.findActiveMerchants(findAllReq(1, 10, "")))
                 .invoke(active -> assertThat(active.getTotalRecords()).isEqualTo(1))
-                .replaceWithVoid();
+                .replaceWithVoid());
     }
 
     // ==================== Update Status ====================
 
     @Test
-    @WithTransaction
-    Uni<Void> testUpdateStatusToSuspended() {
-        return clean()
+    void testUpdateStatusToSuspended(UniAsserter asserter) {
+        asserter.execute(() -> clean()
                 .chain(() -> persistMerchant("Status", "st", 100L, Status.SUCCESS))
                 .chain(m -> commandRepo.updateStatus(m.getMerchantId(), "FAILED")
                         .chain(() -> queryRepo.findMerchantById(m.getMerchantId())))
                 .invoke(updated -> assertThat(updated.getStatus()).isEqualTo(Status.FAILED))
-                .replaceWithVoid();
+                .replaceWithVoid());
     }
 
     @Test
-    @WithTransaction
-    Uni<Void> testUpdateStatusInvalid() {
-        return clean()
+    void testUpdateStatusInvalid(UniAsserter asserter) {
+        asserter.execute(() -> clean()
                 .chain(() -> persistMerchant("Invalid", "inv"))
                 .chain(m -> commandRepo.updateStatus(m.getMerchantId(), "INVALID"))
                 .invoke(result -> assertThat(result).isFalse())
-                .replaceWithVoid();
+                .replaceWithVoid());
     }
 
     // ==================== findByUserId ====================
 
     @Test
-    @WithTransaction
-    Uni<Void> testFindByUserId() {
-        return clean()
+    void testFindByUserId(UniAsserter asserter) {
+        asserter.execute(() -> clean()
                 .chain(() -> persistMerchant("U1", "u1", 42L))
                 .chain(() -> persistMerchant("U2", "u2", 42L))
                 .chain(() -> queryRepo.findByUserId(42L))
                 .invoke(list -> assertThat(list).hasSize(2))
-                .replaceWithVoid();
+                .replaceWithVoid());
     }
 
     @Test
-    @WithTransaction
-    Uni<Void> testFindByUserIdNullReturnsEmpty() {
-        return clean()
+    void testFindByUserIdNullReturnsEmpty(UniAsserter asserter) {
+        asserter.execute(() -> clean()
                 .chain(() -> queryRepo.findByUserId(null))
                 .invoke(list -> assertThat(list).isEmpty())
-                .replaceWithVoid();
+                .replaceWithVoid());
     }
 
     // ==================== Edge Cases ====================
 
     @Test
-    @WithTransaction
-    Uni<Void> testEmptyDatabaseReturnsZeroRecords() {
-        return clean()
+    void testEmptyDatabaseReturnsZeroRecords(UniAsserter asserter) {
+        asserter.execute(() -> clean()
                 .chain(() -> queryRepo.findMerchants(findAllReq(1, 10, "")))
                 .invoke(r -> assertThat(r.getTotalRecords()).isZero())
                 .chain(() -> queryRepo.findActiveMerchants(findAllReq(1, 10, "")))
                 .invoke(r -> assertThat(r.getTotalRecords()).isZero())
                 .chain(() -> queryRepo.findTrashedMerchants(findAllReq(1, 10, "")))
                 .invoke(r -> assertThat(r.getTotalRecords()).isZero())
-                .replaceWithVoid();
+                .replaceWithVoid());
     }
 
     @Test
-    @WithTransaction
-    Uni<Void> testSearchNoMatchReturnsZero() {
-        return clean()
+    void testSearchNoMatchReturnsZero(UniAsserter asserter) {
+        asserter.execute(() -> clean()
                 .chain(() -> persistMerchant("Something", "sm"))
                 .chain(() -> queryRepo.findMerchants(findAllReq(1, 10, "NOMATCH")))
                 .invoke(r -> assertThat(r.getTotalRecords()).isZero())
-                .replaceWithVoid();
+                .replaceWithVoid());
     }
 }

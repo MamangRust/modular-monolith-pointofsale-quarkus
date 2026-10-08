@@ -7,23 +7,26 @@ import org.junit.jupiter.api.Test;
 
 import com.sanedge.transaction.domain.requests.FindTransactionMonthMerchantRange;
 
-import io.quarkus.hibernate.reactive.panache.common.WithSession;
 import io.quarkus.test.junit.QuarkusTest;
-import io.quarkus.test.vertx.RunOnVertxContext;
+import io.quarkus.test.TestReactiveTransaction;
+import io.quarkus.test.vertx.UniAsserter;
 import io.smallrye.mutiny.Uni;
 import jakarta.inject.Inject;
+import com.sanedge.common.test.PostgreSqlResource;
+import io.quarkus.test.common.QuarkusTestResource;
 
 @Disabled("Requires PostgreSQL-specific functions; enable after verifying DB compatibility")
 @QuarkusTest
-@RunOnVertxContext
+@QuarkusTestResource(PostgreSqlResource.class)
+@TestReactiveTransaction
 class TransactionMethodByMerchantRepositoryTest {
 
     @Inject
     TransactionMethodByMerchantRepository repository;
 
     @Test
-    @WithSession
-    Uni<Void> testFindMonthlyMethodsSuccessByMerchant_ReturnsEmptyWhenNoData() {
+    void testFindMonthlyMethodsSuccessByMerchant_ReturnsEmptyWhenNoData(UniAsserter asserter) {
+        asserter.execute(() -> {
         FindTransactionMonthMerchantRange req = new FindTransactionMonthMerchantRange();
         req.setMerchantId(999999L);
         req.setStartYear(2024);
@@ -37,11 +40,11 @@ class TransactionMethodByMerchantRepositoryTest {
                     assertThat(result).isEmpty();
                 })
                 .replaceWithVoid();
-    }
+    });}
 
     @Test
-    @WithSession
-    Uni<Void> testFindMonthlyMethodsFailedByMerchant_ReturnsEmptyWhenNoData() {
+    void testFindMonthlyMethodsFailedByMerchant_ReturnsEmptyWhenNoData(UniAsserter asserter) {
+        asserter.execute(() -> {
         FindTransactionMonthMerchantRange req = new FindTransactionMonthMerchantRange();
         req.setMerchantId(999999L);
         req.setStartYear(2024);
@@ -55,27 +58,25 @@ class TransactionMethodByMerchantRepositoryTest {
                     assertThat(result).isEmpty();
                 })
                 .replaceWithVoid();
-    }
+    });}
 
     @Test
-    @WithSession
-    Uni<Void> testFindYearlyMethodsSuccessByMerchant_ReturnsEmptyWhenNoData() {
-        return repository.findYearlyTransactionMethodsSuccessByMerchant(999999L, 2024)
+    void testFindYearlyMethodsSuccessByMerchant_ReturnsEmptyWhenNoData(UniAsserter asserter) {
+        asserter.execute(() -> repository.findYearlyTransactionMethodsSuccessByMerchant(999999L, 2024)
                 .invoke(result -> {
                     assertThat(result).isNotNull();
                     assertThat(result).isEmpty();
                 })
-                .replaceWithVoid();
+                .replaceWithVoid());
     }
 
     @Test
-    @WithSession
-    Uni<Void> testFindYearlyMethodsFailedByMerchant_ReturnsEmptyWhenNoData() {
-        return repository.findYearlyTransactionMethodsFailedByMerchant(999999L, 2024)
+    void testFindYearlyMethodsFailedByMerchant_ReturnsEmptyWhenNoData(UniAsserter asserter) {
+        asserter.execute(() -> repository.findYearlyTransactionMethodsFailedByMerchant(999999L, 2024)
                 .invoke(result -> {
                     assertThat(result).isNotNull();
                     assertThat(result).isEmpty();
                 })
-                .replaceWithVoid();
+                .replaceWithVoid());
     }
 }

@@ -10,14 +10,17 @@ import org.junit.jupiter.api.Test;
 import com.sanedge.category.domain.requests.FindAllCategory;
 import com.sanedge.category.entity.Category;
 
-import io.quarkus.hibernate.reactive.panache.common.WithTransaction;
 import io.quarkus.test.junit.QuarkusTest;
-import io.quarkus.test.vertx.RunOnVertxContext;
+import io.quarkus.test.TestReactiveTransaction;
+import io.quarkus.test.vertx.UniAsserter;
 import io.smallrye.mutiny.Uni;
 import jakarta.inject.Inject;
+import com.sanedge.common.test.PostgreSqlResource;
+import io.quarkus.test.common.QuarkusTestResource;
 
 @QuarkusTest
-@RunOnVertxContext
+@QuarkusTestResource(PostgreSqlResource.class)
+@TestReactiveTransaction
 class CategoryRepositoryTest {
 
     @Inject
@@ -47,9 +50,8 @@ class CategoryRepositoryTest {
     }
 
     @Test
-    @WithTransaction
-    Uni<Void> testCreateAndFindById() {
-        return clean()
+    void testCreateAndFindById(UniAsserter asserter) {
+        asserter.execute(() -> clean()
                 .chain(() -> persistCategory("Test Category"))
                 .chain(c -> categoryQueryRepo.findCategoryById(c.getCategoryId()))
                 .invoke(found -> {
@@ -57,41 +59,37 @@ class CategoryRepositoryTest {
                     assertThat(found.getName()).isEqualTo("Test Category");
                     assertThat(found.getDeletedAt()).isNull();
                 })
-                .replaceWithVoid();
+                .replaceWithVoid());
     }
 
     @Test
-    @WithTransaction
-    Uni<Void> testFindByName() {
-        return clean()
+    void testFindByName(UniAsserter asserter) {
+        asserter.execute(() -> clean()
                 .chain(() -> persistCategory("Unique Name"))
                 .chain(() -> categoryQueryRepo.findByName("Unique Name"))
                 .invoke(found -> assertThat(found).isNotNull())
-                .replaceWithVoid();
+                .replaceWithVoid());
     }
 
     @Test
-    @WithTransaction
-    Uni<Void> testFindByNameReturnsNullIfNotFound() {
-        return clean()
+    void testFindByNameReturnsNullIfNotFound(UniAsserter asserter) {
+        asserter.execute(() -> clean()
                 .chain(() -> categoryQueryRepo.findByName("NonExistent"))
                 .invoke(found -> assertThat(found).isNull())
-                .replaceWithVoid();
+                .replaceWithVoid());
     }
 
     @Test
-    @WithTransaction
-    Uni<Void> testFindCategoryByIdReturnsNullIfNotFound() {
-        return clean()
+    void testFindCategoryByIdReturnsNullIfNotFound(UniAsserter asserter) {
+        asserter.execute(() -> clean()
                 .chain(() -> categoryQueryRepo.findCategoryById(9999L))
                 .invoke(found -> assertThat(found).isNull())
-                .replaceWithVoid();
+                .replaceWithVoid());
     }
 
     @Test
-    @WithTransaction
-    Uni<Void> testFindCategoriesWithSearch() {
-        return clean()
+    void testFindCategoriesWithSearch(UniAsserter asserter) {
+        asserter.execute(() -> clean()
                 .chain(() -> persistCategory("Alpha"))
                 .chain(() -> persistCategory("Beta"))
                 .chain(() -> persistCategory("Gamma"))
@@ -103,13 +101,12 @@ class CategoryRepositoryTest {
                     assertThat(result.getTotalRecords()).isEqualTo(1);
                     assertThat(result.getData().get(0).getName()).isEqualTo("Alpha");
                 })
-                .replaceWithVoid();
+                .replaceWithVoid());
     }
 
     @Test
-    @WithTransaction
-    Uni<Void> testFindCategoriesPagination() {
-        return clean()
+    void testFindCategoriesPagination(UniAsserter asserter) {
+        asserter.execute(() -> clean()
                 .chain(() -> persistCategory("A"))
                 .chain(() -> persistCategory("B"))
                 .chain(() -> persistCategory("C"))
@@ -123,13 +120,12 @@ class CategoryRepositoryTest {
                     assertThat(page2.getData()).hasSize(2);
                     assertThat(page2.getTotalRecords()).isEqualTo(5);
                 })
-                .replaceWithVoid();
+                .replaceWithVoid());
     }
 
     @Test
-    @WithTransaction
-    Uni<Void> testFindActiveCategoriesExcludesTrashed() {
-        return clean()
+    void testFindActiveCategoriesExcludesTrashed(UniAsserter asserter) {
+        asserter.execute(() -> clean()
                 .chain(() -> persistCategory("Active1"))
                 .chain(() -> persistCategory("ToTrash").chain(c -> categoryCommandRepo.trashed(c.getCategoryId())))
                 .chain(() -> {
@@ -137,13 +133,12 @@ class CategoryRepositoryTest {
                     return categoryQueryRepo.findActiveCategories(req);
                 })
                 .invoke(result -> assertThat(result.getTotalRecords()).isEqualTo(1))
-                .replaceWithVoid();
+                .replaceWithVoid());
     }
 
     @Test
-    @WithTransaction
-    Uni<Void> testFindTrashedCategoriesOnlyTrashed() {
-        return clean()
+    void testFindTrashedCategoriesOnlyTrashed(UniAsserter asserter) {
+        asserter.execute(() -> clean()
                 .chain(() -> persistCategory("Stay"))
                 .chain(() -> persistCategory("TrashMe").chain(c -> categoryCommandRepo.trashed(c.getCategoryId())))
                 .chain(() -> {
@@ -154,38 +149,35 @@ class CategoryRepositoryTest {
                     assertThat(result.getTotalRecords()).isEqualTo(1);
                     assertThat(result.getData().get(0).getName()).isEqualTo("TrashMe");
                 })
-                .replaceWithVoid();
+                .replaceWithVoid());
     }
 
     @Test
-    @WithTransaction
-    Uni<Void> testFindNameAndId() {
-        return clean()
+    void testFindNameAndId(UniAsserter asserter) {
+        asserter.execute(() -> clean()
                 .chain(() -> persistCategory("X"))
                 .chain(() -> persistCategory("Y"))
                 .chain(() -> categoryQueryRepo.findNameAndId())
                 .invoke(list -> assertThat(list).hasSize(2))
-                .replaceWithVoid();
+                .replaceWithVoid());
     }
 
     // Soft delete & restore
     @Test
-    @WithTransaction
-    Uni<Void> testTrashCategory() {
-        return clean()
+    void testTrashCategory(UniAsserter asserter) {
+        asserter.execute(() -> clean()
                 .chain(() -> persistCategory("ToTrash"))
                 .chain(c -> categoryCommandRepo.trashed(c.getCategoryId()))
                 .invoke(trashed -> {
                     assertThat(trashed).isNotNull();
                     assertThat(trashed.getDeletedAt()).isNotNull();
                 })
-                .replaceWithVoid();
+                .replaceWithVoid());
     }
 
     @Test
-    @WithTransaction
-    Uni<Void> testTrashAlreadyTrashedReturnsSame() {
-        return clean()
+    void testTrashAlreadyTrashedReturnsSame(UniAsserter asserter) {
+        asserter.execute(() -> clean()
                 .chain(() -> persistCategory("Already"))
                 .chain(c -> categoryCommandRepo.trashed(c.getCategoryId())
                         .chain(() -> categoryCommandRepo.trashed(c.getCategoryId())))
@@ -194,13 +186,12 @@ class CategoryRepositoryTest {
                     assertThat(trashed).isNotNull();
                     assertThat(trashed.getDeletedAt()).isNotNull();
                 })
-                .replaceWithVoid();
+                .replaceWithVoid());
     }
 
     @Test
-    @WithTransaction
-    Uni<Void> testRestoreCategory() {
-        return clean()
+    void testRestoreCategory(UniAsserter asserter) {
+        asserter.execute(() -> clean()
                 .chain(() -> persistCategory("RestoreMe"))
                 .chain(c -> categoryCommandRepo.trashed(c.getCategoryId())
                         .chain(() -> categoryCommandRepo.restore(c.getCategoryId())))
@@ -208,44 +199,40 @@ class CategoryRepositoryTest {
                     assertThat(restored).isNotNull();
                     assertThat(restored.getDeletedAt()).isNull();
                 })
-                .replaceWithVoid();
+                .replaceWithVoid());
     }
 
     @Test
-    @WithTransaction
-    Uni<Void> testRestoreNonExistentReturnsNull() {
-        return clean()
+    void testRestoreNonExistentReturnsNull(UniAsserter asserter) {
+        asserter.execute(() -> clean()
                 .chain(() -> categoryCommandRepo.restore(99999L))
                 .invoke(restored -> assertThat(restored).isNull())
-                .replaceWithVoid();
+                .replaceWithVoid());
     }
 
     @Test
-    @WithTransaction
-    Uni<Void> testDeletePermanent() {
-        return clean()
+    void testDeletePermanent(UniAsserter asserter) {
+        asserter.execute(() -> clean()
                 .chain(() -> persistCategory("DelPerm"))
                 .chain(c -> categoryCommandRepo.trashed(c.getCategoryId())
                         .chain(() -> categoryCommandRepo.deletePermanent(c.getCategoryId()))
                         .chain(perm -> categoryQueryRepo.findCategoryById(c.getCategoryId())))
                 .invoke(found -> assertThat(found).isNull())
-                .replaceWithVoid();
+                .replaceWithVoid());
     }
 
     @Test
-    @WithTransaction
-    Uni<Void> testDeletePermanentNotTrashedReturnsNull() {
-        return clean()
+    void testDeletePermanentNotTrashedReturnsNull(UniAsserter asserter) {
+        asserter.execute(() -> clean()
                 .chain(() -> persistCategory("Active"))
                 .chain(c -> categoryCommandRepo.deletePermanent(c.getCategoryId()))
                 .invoke(result -> assertThat(result).isNull())
-                .replaceWithVoid();
+                .replaceWithVoid());
     }
 
     @Test
-    @WithTransaction
-    Uni<Void> testRestoreAllDeleted() {
-        return clean()
+    void testRestoreAllDeleted(UniAsserter asserter) {
+        asserter.execute(() -> clean()
                 .chain(() -> persistCategory("A").chain(c -> categoryCommandRepo.trashed(c.getCategoryId()).replaceWithVoid()))
                 .chain(() -> persistCategory("B").chain(c -> categoryCommandRepo.trashed(c.getCategoryId()).replaceWithVoid()))
                 .chain(() -> categoryCommandRepo.restoreAllDeleted())
@@ -255,13 +242,12 @@ class CategoryRepositoryTest {
                     return categoryQueryRepo.findTrashedCategories(req);
                 })
                 .invoke(trashed -> assertThat(trashed.getTotalRecords()).isEqualTo(0))
-                .replaceWithVoid();
+                .replaceWithVoid());
     }
 
     @Test
-    @WithTransaction
-    Uni<Void> testDeleteAllDeleted() {
-        return clean()
+    void testDeleteAllDeleted(UniAsserter asserter) {
+        asserter.execute(() -> clean()
                 .chain(() -> persistCategory("X").chain(c -> categoryCommandRepo.trashed(c.getCategoryId()).replaceWithVoid()))
                 .chain(() -> persistCategory("Y"))
                 .chain(() -> categoryCommandRepo.deleteAllDeleted())
@@ -271,14 +257,13 @@ class CategoryRepositoryTest {
                     return categoryQueryRepo.findActiveCategories(req);
                 })
                 .invoke(active -> assertThat(active.getTotalRecords()).isEqualTo(1))
-                .replaceWithVoid();
+                .replaceWithVoid());
     }
 
     // Edge Cases
     @Test
-    @WithTransaction
-    Uni<Void> testEmptyDatabaseReturnsZeroRecords() {
-        return clean()
+    void testEmptyDatabaseReturnsZeroRecords(UniAsserter asserter) {
+        asserter.execute(() -> clean()
                 .chain(() -> {
                     FindAllCategory req = findAllReq(1, 10, "");
                     return categoryQueryRepo.findCategories(req);
@@ -294,19 +279,18 @@ class CategoryRepositoryTest {
                     return categoryQueryRepo.findTrashedCategories(req);
                 })
                 .invoke(r -> assertThat(r.getTotalRecords()).isEqualTo(0))
-                .replaceWithVoid();
+                .replaceWithVoid());
     }
 
     @Test
-    @WithTransaction
-    Uni<Void> testSearchNoMatchReturnsZero() {
-        return clean()
+    void testSearchNoMatchReturnsZero(UniAsserter asserter) {
+        asserter.execute(() -> clean()
                 .chain(() -> persistCategory("Something"))
                 .chain(() -> {
                     FindAllCategory req = findAllReq(1, 10, "NOMATCH");
                     return categoryQueryRepo.findCategories(req);
                 })
                 .invoke(r -> assertThat(r.getTotalRecords()).isEqualTo(0))
-                .replaceWithVoid();
+                .replaceWithVoid());
     }
 }

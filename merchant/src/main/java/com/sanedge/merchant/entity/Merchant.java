@@ -1,5 +1,7 @@
 package com.sanedge.merchant.entity;
 
+import com.sanedge.common.entity.BaseModel;
+
 import java.util.UUID;
 import com.sanedge.common.enums.Status;
 

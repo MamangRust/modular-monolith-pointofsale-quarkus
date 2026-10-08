@@ -2,22 +2,26 @@ package com.sanedge.role.repository;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.util.ArrayList;
+import java.util.List;
+
 import org.junit.jupiter.api.Test;
+import org.hibernate.reactive.mutiny.Mutiny;
 
 import com.sanedge.common.test.PostgreSqlResource;
 import com.sanedge.role.domain.requests.FindAllRoles;
 import com.sanedge.role.entity.Role;
 
-import io.quarkus.hibernate.reactive.panache.common.WithSession;
 import io.quarkus.test.common.QuarkusTestResource;
 import io.quarkus.test.junit.QuarkusTest;
-import io.quarkus.test.vertx.RunOnVertxContext;
+import io.quarkus.test.TestReactiveTransaction;
+import io.quarkus.test.vertx.UniAsserter;
 import io.smallrye.mutiny.Uni;
 import jakarta.inject.Inject;
 
 @QuarkusTest
 @QuarkusTestResource(PostgreSqlResource.class)
-@RunOnVertxContext
+@TestReactiveTransaction
 class RoleRepositoryTest {
 
     @Inject
@@ -29,330 +33,271 @@ class RoleRepositoryTest {
         return roleRepository.persist(role).replaceWith(role);
     }
 
+    // A Hibernate Reactive session is not thread-safe, so entities must be
+    // persisted sequentially instead of via Uni.combine().all()/Uni.join().all().
+    private Uni<List<Role>> createAndPersistRoles(String... names) {
+        Uni<List<Role>> chain = Uni.createFrom().item(new ArrayList<Role>());
+        for (String name : names) {
+            chain = chain.chain(roles -> createAndPersistRole(name)
+                    .invoke(roles::add)
+                    .replaceWith(roles));
+        }
+        return chain;
+    }
+
+    private Uni<Void> trashSequentially(List<Role> roles, int... indices) {
+        Uni<Void> chain = Uni.createFrom().voidItem();
+        for (int index : indices) {
+            Role role = roles.get(index);
+            chain = chain.chain(() -> roleRepository.trash(role.id).replaceWithVoid());
+        }
+        return chain;
+    }
+
+    private Uni<Void> clearSession() {
+        return roleRepository.getSession().invoke(Mutiny.Session::clear).replaceWithVoid();
+    }
+
+    private Uni<List<Role>> reload(List<Role> roles) {
+        Uni<List<Role>> chain = Uni.createFrom().item(new ArrayList<Role>());
+        for (Role role : roles) {
+            chain = chain.chain(list -> roleRepository.findById(role.id)
+                    .invoke(list::add)
+                    .replaceWith(list));
+        }
+        return chain;
+    }
+
+    private FindAllRoles pageRequest(int page, int pageSize, String search) {
+        FindAllRoles req = new FindAllRoles();
+        req.setPage(page);
+        req.setPageSize(pageSize);
+        req.setSearch(search);
+        return req;
+    }
+
     @Test
-    @WithSession
-    Uni<Void> testCreateAndFindById() {
-        return createAndPersistRole("Admin")
+    void testCreateAndFindById(UniAsserter asserter) {
+        asserter.execute(() -> createAndPersistRole("Admin")
                 .invoke(saved -> {
                     assertThat(saved).isNotNull();
                     assertThat(saved.id).isNotNull();
                     assertThat(saved.getRoleName()).isEqualTo("Admin");
                 })
-                .chain(saved -> roleRepository.findById((Long) saved.id))
+                .chain(saved -> roleRepository.findById(saved.id))
                 .invoke(found -> {
                     assertThat(found).isNotNull();
                     assertThat(found.getRoleName()).isEqualTo("Admin");
                 })
-                .replaceWithVoid();
+                .replaceWithVoid());
     }
 
     @Test
-    @WithSession
-    Uni<Void> testFindByRoleName() {
-        return createAndPersistRole("Editor")
+    void testFindByRoleName(UniAsserter asserter) {
+        asserter.execute(() -> createAndPersistRole("Editor")
                 .chain(ignored -> roleRepository.findByRoleName("Editor"))
                 .invoke(found -> {
                     assertThat(found).isNotNull();
                     assertThat(found.getRoleName()).isEqualTo("Editor");
                 })
-                .replaceWithVoid();
+                .replaceWithVoid());
     }
 
     @Test
-    @WithSession
-    Uni<Void> testFindByRoleNameReturnsNullWhenNotFound() {
-        return roleRepository.findByRoleName("NonExistentRole")
+    void testFindByRoleNameReturnsNullWhenNotFound(UniAsserter asserter) {
+        asserter.execute(() -> roleRepository.findByRoleName("NonExistentRole")
                 .invoke(notFound -> assertThat(notFound).isNull())
-                .replaceWithVoid();
+                .replaceWithVoid());
     }
 
     @Test
-    @WithSession
-    Uni<Void> testFindByIdReturnsNullWhenNotFound() {
-        return roleRepository.findById(99999L)
+    void testFindByIdReturnsNullWhenNotFound(UniAsserter asserter) {
+        asserter.execute(() -> roleRepository.findById(99999L)
                 .invoke(notFound -> assertThat(notFound).isNull())
-                .replaceWithVoid();
+                .replaceWithVoid());
     }
 
     @Test
-    @WithSession
-    Uni<Void> testFindUserRolesReturnsEmptyWhenNoMapping() {
-        return roleRepository.findUserRoles(99999L)
+    void testFindUserRolesReturnsEmptyWhenNoMapping(UniAsserter asserter) {
+        asserter.execute(() -> roleRepository.findUserRoles(99999L)
                 .invoke(result -> assertThat(result).isEmpty())
-                .replaceWithVoid();
+                .replaceWithVoid());
     }
 
     @Test
-    @WithSession
-    Uni<Void> testTrashRole() {
-        return createAndPersistRole("TrashMe")
+    void testTrashRole(UniAsserter asserter) {
+        asserter.execute(() -> createAndPersistRole("TrashMe")
                 .invoke(saved -> assertThat(saved.getDeletedAt()).isNull())
-                .chain(saved -> roleRepository.trash((Long) saved.id))
+                .chain(saved -> roleRepository.trash(saved.id))
                 .invoke(trashed -> {
                     assertThat(trashed).isNotNull();
                     assertThat(trashed.getDeletedAt()).isNotNull();
                 })
-                .replaceWithVoid();
+                .replaceWithVoid());
     }
 
     @Test
-    @WithSession
-    Uni<Void> testTrashRoleReturnsNullIfAlreadyTrashed() {
-        return createAndPersistRole("TrashMe2")
-                .chain(saved -> roleRepository.trash((Long) saved.id)
-                        .chain(ignored -> roleRepository.trash((Long) saved.id)))
+    void testTrashRoleReturnsNullIfAlreadyTrashed(UniAsserter asserter) {
+        asserter.execute(() -> createAndPersistRole("TrashMe2")
+                .chain(saved -> roleRepository.trash(saved.id)
+                        .chain(ignored -> roleRepository.trash(saved.id)))
                 .invoke(trashedAgain -> assertThat(trashedAgain).isNull())
-                .replaceWithVoid();
+                .replaceWithVoid());
     }
 
     @Test
-    @WithSession
-    Uni<Void> testTrashRoleReturnsNullIfNotFound() {
-        return roleRepository.trash(99999L)
+    void testTrashRoleReturnsNullIfNotFound(UniAsserter asserter) {
+        asserter.execute(() -> roleRepository.trash(99999L)
                 .invoke(trashed -> assertThat(trashed).isNull())
-                .replaceWithVoid();
+                .replaceWithVoid());
     }
 
     @Test
-    @WithSession
-    Uni<Void> testRestoreRole() {
-        return createAndPersistRole("RestoreMe")
-                .chain(saved -> roleRepository.trash((Long) saved.id)
-                        .chain(ignored -> roleRepository.restore((Long) saved.id)))
+    void testRestoreRole(UniAsserter asserter) {
+        asserter.execute(() -> createAndPersistRole("RestoreMe")
+                .chain(saved -> roleRepository.trash(saved.id)
+                        .chain(ignored -> roleRepository.restore(saved.id)))
                 .invoke(restored -> {
                     assertThat(restored).isNotNull();
                     assertThat(restored.getDeletedAt()).isNull();
                 })
-                .replaceWithVoid();
+                .replaceWithVoid());
     }
 
     @Test
-    @WithSession
-    Uni<Void> testRestoreRoleReturnsNullIfNotTrashed() {
-        return createAndPersistRole("RestoreMe2")
-                .chain(saved -> roleRepository.restore((Long) saved.id))
+    void testRestoreRoleReturnsNullIfNotTrashed(UniAsserter asserter) {
+        asserter.execute(() -> createAndPersistRole("RestoreMe2")
+                .chain(saved -> roleRepository.restore(saved.id))
                 .invoke(restored -> assertThat(restored).isNull())
-                .replaceWithVoid();
+                .replaceWithVoid());
     }
 
     @Test
-    @WithSession
-    Uni<Void> testDeletePermanent() {
-        return createAndPersistRole("DeleteMe")
-                .chain(saved -> roleRepository.trash((Long) saved.id)
-                        .chain(ignored -> roleRepository.deletePermanent((Long) saved.id))
+    void testDeletePermanent(UniAsserter asserter) {
+        asserter.execute(() -> createAndPersistRole("DeleteMe")
+                .chain(saved -> roleRepository.trash(saved.id)
+                        .chain(ignored -> roleRepository.deletePermanent(saved.id))
                         .chain(deleted -> {
                             assertThat(deleted).isNotNull();
-                            return roleRepository.findById((Long) saved.id);
+                            return roleRepository.findById(saved.id);
                         }))
                 .invoke(checkDb -> assertThat(checkDb).isNull())
-                .replaceWithVoid();
+                .replaceWithVoid());
     }
 
     @Test
-    @WithSession
-    Uni<Void> testDeletePermanentFailsIfNotTrashed() {
-        return createAndPersistRole("DeleteMe2")
-                .chain(saved -> roleRepository.deletePermanent((Long) saved.id)
+    void testDeletePermanentFailsIfNotTrashed(UniAsserter asserter) {
+        asserter.execute(() -> createAndPersistRole("DeleteMe2")
+                .chain(saved -> roleRepository.deletePermanent(saved.id)
                         .chain(deleted -> {
-                            assertThat(deleted).isNotNull();
-                            return roleRepository.findById((Long) saved.id);
+                            assertThat(deleted).isNull();
+                            return roleRepository.findById(saved.id);
                         }))
                 .invoke(checkDb -> assertThat(checkDb).isNotNull())
-                .replaceWithVoid();
+                .replaceWithVoid());
     }
 
     @Test
-    @WithSession
-    Uni<Void> testRestoreAllDeleted() {
-        return Uni.combine().all()
-                .unis(createAndPersistRole("BulkRole1"),
-                        createAndPersistRole("BulkRole2"))
-                .asTuple()
-                .chain(tuple -> Uni.join().all(
-                        roleRepository.trash(tuple.getItem1().id),
-                        roleRepository.trash(tuple.getItem2().id))
-                        .andCollectFailures()
-                        .replaceWith(tuple))
-                .chain(tuple -> roleRepository.restoreAllDeleted()
+    void testRestoreAllDeleted(UniAsserter asserter) {
+        asserter.execute(() -> createAndPersistRoles("BulkRole1", "BulkRole2")
+                .chain(roles -> trashSequentially(roles, 0, 1).replaceWith(roles))
+                .chain(roles -> roleRepository.restoreAllDeleted()
                         .chain(result -> {
                             assertThat(result).isTrue();
-                            return Uni.join().all(
-                                    roleRepository.findById(tuple.getItem1().id),
-                                    roleRepository.findById(tuple.getItem2().id))
-                                    .andCollectFailures()
-                                    .replaceWith(tuple);
+                            return clearSession().replaceWith(roles);
                         }))
-                .invoke(tuple -> {
-                    assertThat(tuple.getItem1().getDeletedAt()).isNull();
-                    assertThat(tuple.getItem2().getDeletedAt()).isNull();
+                .chain(this::reload)
+                .invoke(roles -> {
+                    assertThat(roles.get(0).getDeletedAt()).isNull();
+                    assertThat(roles.get(1).getDeletedAt()).isNull();
                 })
-                .replaceWithVoid();
+                .replaceWithVoid());
     }
 
     @Test
-    @WithSession
-    Uni<Void> testDeleteAllDeleted() {
-        return Uni.combine().all()
-                .unis(createAndPersistRole("BulkDelRole1"),
-                        createAndPersistRole("BulkDelRole2"),
-                        createAndPersistRole("BulkDelRole3"))
-                .asTuple()
-                .chain(tuple -> Uni.join().all(
-                        roleRepository.trash(tuple.getItem1().id),
-                        roleRepository.trash(tuple.getItem2().id))
-                        .andCollectFailures()
-                        .replaceWith(tuple))
-                .chain(tuple -> roleRepository.deleteAllDeleted()
+    void testDeleteAllDeleted(UniAsserter asserter) {
+        asserter.execute(() -> createAndPersistRoles("BulkDelRole1", "BulkDelRole2", "BulkDelRole3")
+                .chain(roles -> trashSequentially(roles, 0, 1).replaceWith(roles))
+                .chain(roles -> roleRepository.deleteAllDeleted()
                         .chain(result -> {
                             assertThat(result).isTrue();
-                            return Uni.join().all(
-                                    roleRepository.findById(tuple.getItem1().id),
-                                    roleRepository.findById(tuple.getItem2().id),
-                                    roleRepository.findById(tuple.getItem3().id))
-                                    .andCollectFailures()
-                                    .replaceWith(tuple);
+                            return clearSession().replaceWith(roles);
                         }))
-                .invoke(tuple -> {
-                    assertThat(tuple.getItem1()).isNull();
-                    assertThat(tuple.getItem2()).isNull();
-                    assertThat(tuple.getItem3()).isNotNull();
+                .chain(this::reload)
+                .invoke(roles -> {
+                    assertThat(roles.get(0)).isNull();
+                    assertThat(roles.get(1)).isNull();
+                    assertThat(roles.get(2)).isNotNull();
                 })
-                .replaceWithVoid();
+                .replaceWithVoid());
     }
 
     @Test
-    @WithSession
-    Uni<Void> testFindActiveRoles() {
-        return Uni.combine().all()
-                .unis(createAndPersistRole("ActiveRole1"),
-                        createAndPersistRole("TrashedRole1"))
-                .asTuple()
-                .chain(tuple -> roleRepository.trash(tuple.getItem2().id)
-                        .replaceWith(tuple))
-                .chain(tuple -> {
-                    FindAllRoles req = new FindAllRoles();
-                    req.setPage(1);
-                    req.setPageSize(10);
-                    return roleRepository.findActiveRoles(req);
-                })
+    void testFindActiveRoles(UniAsserter asserter) {
+        asserter.execute(() -> createAndPersistRoles("ActiveRole1", "TrashedRole1")
+                .chain(roles -> trashSequentially(roles, 1).replaceWith(roles))
+                .chain(roles -> roleRepository.findActiveRoles(pageRequest(1, 10, null)))
                 .invoke(result -> {
                     assertThat(result.getData()).hasSize(1);
                     assertThat(result.getData().get(0).getRoleName()).isEqualTo("ActiveRole1");
                     assertThat(result.getTotalRecords()).isEqualTo(1);
                 })
-                .replaceWithVoid();
+                .replaceWithVoid());
     }
 
     @Test
-    @WithSession
-    Uni<Void> testFindTrashedRoles() {
-        return Uni.combine().all()
-                .unis(createAndPersistRole("TrashedRole2"),
-                        createAndPersistRole("ActiveRole2"))
-                .asTuple()
-                .chain(tuple -> roleRepository.trash(tuple.getItem1().id)
-                        .replaceWith(tuple))
-                .chain(tuple -> {
-                    FindAllRoles req = new FindAllRoles();
-                    req.setPage(1);
-                    req.setPageSize(10);
-                    return roleRepository.findTrashedRoles(req);
-                })
+    void testFindTrashedRoles(UniAsserter asserter) {
+        asserter.execute(() -> createAndPersistRoles("TrashedRole2", "ActiveRole2")
+                .chain(roles -> trashSequentially(roles, 0).replaceWith(roles))
+                .chain(roles -> roleRepository.findTrashedRoles(pageRequest(1, 10, null)))
                 .invoke(result -> {
                     assertThat(result.getData()).hasSize(1);
                     assertThat(result.getData().get(0).getRoleName()).isEqualTo("TrashedRole2");
                 })
-                .replaceWithVoid();
+                .replaceWithVoid());
     }
 
     @Test
-    @WithSession
-    Uni<Void> testFindRolesWithSearchKeyword() {
-        return Uni.join().all(
-                createAndPersistRole("SuperAdmin"),
-                createAndPersistRole("SuperEditor"),
-                createAndPersistRole("Viewer"))
-                .andCollectFailures()
-                .chain(ignored -> {
-                    FindAllRoles req = new FindAllRoles();
-                    req.setPage(1);
-                    req.setPageSize(10);
-                    req.setSearch("Super");
-                    return roleRepository.findRoles(req);
-                })
+    void testFindRolesWithSearchKeyword(UniAsserter asserter) {
+        asserter.execute(() -> createAndPersistRoles("SuperAdmin", "SuperEditor", "Viewer")
+                .chain(roles -> roleRepository.findRoles(pageRequest(1, 10, "Super")))
                 .invoke(result -> {
                     assertThat(result.getData()).hasSize(2);
                     assertThat(result.getTotalRecords()).isEqualTo(2);
                 })
-                .replaceWithVoid();
+                .replaceWithVoid());
     }
 
     @Test
-    @WithSession
-    Uni<Void> testFindRolesWithPagination() {
-        return Uni.join().all(
-                createAndPersistRole("PageRole1"),
-                createAndPersistRole("PageRole2"),
-                createAndPersistRole("PageRole3"),
-                createAndPersistRole("PageRole4"),
-                createAndPersistRole("PageRole5"))
-                .andCollectFailures()
-                .chain(ignored -> {
-                    FindAllRoles reqPage1 = new FindAllRoles();
-                    reqPage1.setPage(1);
-                    reqPage1.setPageSize(2);
-                    return roleRepository.findRoles(reqPage1);
-                })
+    void testFindRolesWithPagination(UniAsserter asserter) {
+        asserter.execute(() -> createAndPersistRoles("PageRole1", "PageRole2", "PageRole3",
+                "PageRole4", "PageRole5")
+                .chain(roles -> roleRepository.findRoles(pageRequest(1, 2, null)))
                 .invoke(page1 -> {
                     assertThat(page1.getData()).hasSize(2);
                     assertThat(page1.getTotalRecords()).isEqualTo(5);
                 })
-                .chain(page1 -> {
-                    FindAllRoles reqPage2 = new FindAllRoles();
-                    reqPage2.setPage(2);
-                    reqPage2.setPageSize(2);
-                    return roleRepository.findRoles(reqPage2)
-                            .invoke(page2 -> {
-                                assertThat(page2.getData()).hasSize(2);
-                            });
-                })
-                .replaceWithVoid();
+                .chain(page1 -> roleRepository.findRoles(pageRequest(2, 2, null))
+                        .invoke(page2 -> assertThat(page2.getData()).hasSize(2)))
+                .replaceWithVoid());
     }
 
     @Test
-    @WithSession
-    Uni<Void> testFindRolesWithNullSearchReturnsAll() {
-        return Uni.join().all(
-                createAndPersistRole("RoleC"),
-                createAndPersistRole("RoleD"))
-                .andCollectFailures()
-                .chain(ignored -> {
-                    FindAllRoles req = new FindAllRoles();
-                    req.setPage(1);
-                    req.setPageSize(10);
-                    req.setSearch(null);
-                    return roleRepository.findRoles(req);
-                })
+    void testFindRolesWithNullSearchReturnsAll(UniAsserter asserter) {
+        asserter.execute(() -> createAndPersistRoles("RoleC", "RoleD")
+                .chain(roles -> roleRepository.findRoles(pageRequest(1, 10, null)))
                 .invoke(result -> assertThat(result.getData()).hasSize(2))
-                .replaceWithVoid();
+                .replaceWithVoid());
     }
 
     @Test
-    @WithSession
-    Uni<Void> testFindRolesSearchCaseInsensitive() {
-        return createAndPersistRole("ManagerRole")
-                .chain(ignored -> {
-                    FindAllRoles reqLower = new FindAllRoles();
-                    reqLower.setPage(1);
-                    reqLower.setPageSize(10);
-                    reqLower.setSearch("manager");
-                    return roleRepository.findRoles(reqLower);
-                })
+    void testFindRolesSearchCaseInsensitive(UniAsserter asserter) {
+        asserter.execute(() -> createAndPersistRole("ManagerRole")
+                .chain(ignored -> roleRepository.findRoles(pageRequest(1, 10, "manager")))
                 .invoke(result -> {
                     assertThat(result.getData()).hasSize(1);
                     assertThat(result.getData().get(0).getRoleName()).isEqualTo("ManagerRole");
                 })
-                .replaceWithVoid();
+                .replaceWithVoid());
     }
 }

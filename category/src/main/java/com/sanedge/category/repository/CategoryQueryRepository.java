@@ -1,5 +1,7 @@
 package com.sanedge.category.repository;
 
+import com.sanedge.common.repository.PagedQuery;
+
 import java.util.List;
 
 import com.sanedge.category.domain.requests.FindAllCategory;
@@ -26,9 +28,7 @@ public class CategoryQueryRepository implements PanacheRepository<Category> {
         var panacheQuery = find(query, keyword)
                 .page(page, size);
 
-        return Uni.combine().all().unis(panacheQuery.list(), panacheQuery.count())
-                .asTuple()
-                .map(tuple -> new PagedResult<>(tuple.getItem1(), tuple.getItem2().intValue()));
+        return PagedQuery.fetch(panacheQuery);
     }
 
     public Uni<PagedResult<Category>> findActiveCategories(FindAllCategory req) {
@@ -45,9 +45,7 @@ public class CategoryQueryRepository implements PanacheRepository<Category> {
         var panacheQuery = find(query, keyword)
                 .page(page, size);
 
-        return Uni.combine().all().unis(panacheQuery.list(), panacheQuery.count())
-                .asTuple()
-                .map(tuple -> new PagedResult<>(tuple.getItem1(), tuple.getItem2().intValue()));
+        return PagedQuery.fetch(panacheQuery);
     }
 
     public Uni<PagedResult<Category>> findTrashedCategories(FindAllCategory req) {
@@ -64,9 +62,7 @@ public class CategoryQueryRepository implements PanacheRepository<Category> {
         var panacheQuery = find(query, keyword)
                 .page(page, size);
 
-        return Uni.combine().all().unis(panacheQuery.list(), panacheQuery.count())
-                .asTuple()
-                .map(tuple -> new PagedResult<>(tuple.getItem1(), tuple.getItem2().intValue()));
+        return PagedQuery.fetch(panacheQuery);
     }
 
     public Uni<List<Category>> findNameAndId() {

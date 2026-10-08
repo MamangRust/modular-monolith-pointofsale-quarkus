@@ -10,16 +10,16 @@ import com.sanedge.auth.entity.RefreshToken;
 import com.sanedge.auth.entity.ResetToken;
 import com.sanedge.common.test.PostgreSqlResource;
 
-import io.quarkus.hibernate.reactive.panache.common.WithSession;
 import io.quarkus.test.common.QuarkusTestResource;
 import io.quarkus.test.junit.QuarkusTest;
-import io.quarkus.test.vertx.RunOnVertxContext;
+import io.quarkus.test.TestReactiveTransaction;
+import io.quarkus.test.vertx.UniAsserter;
 import io.smallrye.mutiny.Uni;
 import jakarta.inject.Inject;
 
 @QuarkusTest
 @QuarkusTestResource(PostgreSqlResource.class)
-@RunOnVertxContext
+@TestReactiveTransaction
 class AuthRepositoryTest {
 
     @Inject
@@ -53,9 +53,8 @@ class AuthRepositoryTest {
     }
 
     @Test
-    @WithSession
-    Uni<Void> persistRefreshToken() {
-        return cleanUpRefreshTokens()
+    void persistRefreshToken(UniAsserter asserter) {
+        asserter.execute(() -> cleanUpRefreshTokens()
                 .chain(() -> {
                     RefreshToken token = new RefreshToken();
                     token.setToken("test-refresh-token");
@@ -64,13 +63,12 @@ class AuthRepositoryTest {
                     return RefreshToken.persist(token).replaceWith(token);
                 })
                 .invoke(saved -> assertThat(saved.id).isNotNull())
-                .replaceWithVoid();
+                .replaceWithVoid());
     }
 
     @Test
-    @WithSession
-    Uni<Void> findRefreshTokenByToken() {
-        return cleanUpRefreshTokens()
+    void findRefreshTokenByToken(UniAsserter asserter) {
+        asserter.execute(() -> cleanUpRefreshTokens()
                 .chain(() -> createRefreshToken("find-me-token", 1L))
                 .chain(ignored -> refreshTokenRepo.findByToken("find-me-token"))
                 .invoke(found -> {
@@ -78,50 +76,46 @@ class AuthRepositoryTest {
                     assertThat(found.getToken()).isEqualTo("find-me-token");
                     assertThat(found.getUserId()).isEqualTo(1L);
                 })
-                .replaceWithVoid();
+                .replaceWithVoid());
     }
 
     @Test
-    @WithSession
-    Uni<Void> findRefreshTokenByUserId() {
-        return cleanUpRefreshTokens()
+    void findRefreshTokenByUserId(UniAsserter asserter) {
+        asserter.execute(() -> cleanUpRefreshTokens()
                 .chain(() -> createRefreshToken("user-token", 2L))
                 .chain(ignored -> refreshTokenRepo.findByUserId(2L))
                 .invoke(found -> {
                     assertThat(found).isNotNull();
                     assertThat(found.getUserId()).isEqualTo(2L);
                 })
-                .replaceWithVoid();
+                .replaceWithVoid());
     }
 
     @Test
-    @WithSession
-    Uni<Void> deleteRefreshTokenByUserId() {
-        return cleanUpRefreshTokens()
+    void deleteRefreshTokenByUserId(UniAsserter asserter) {
+        asserter.execute(() -> cleanUpRefreshTokens()
                 .chain(() -> createRefreshToken("delete-by-user", 3L))
                 .chain(ignored -> refreshTokenRepo.deleteByUserId(3L))
                 .invoke(deleted -> assertThat(deleted).isPositive())
                 .chain(ignored -> refreshTokenRepo.findByUserId(3L))
                 .invoke(found -> assertThat(found).isNull())
-                .replaceWithVoid();
+                .replaceWithVoid());
     }
 
     @Test
-    @WithSession
-    Uni<Void> deleteRefreshTokenByToken() {
-        return cleanUpRefreshTokens()
+    void deleteRefreshTokenByToken(UniAsserter asserter) {
+        asserter.execute(() -> cleanUpRefreshTokens()
                 .chain(() -> createRefreshToken("delete-by-token", 4L))
                 .chain(ignored -> refreshTokenRepo.deleteByToken("delete-by-token"))
                 .invoke(deleted -> assertThat(deleted).isPositive())
                 .chain(ignored -> refreshTokenRepo.findByToken("delete-by-token"))
                 .invoke(found -> assertThat(found).isNull())
-                .replaceWithVoid();
+                .replaceWithVoid());
     }
 
     @Test
-    @WithSession
-    Uni<Void> persistResetToken() {
-        return cleanUpResetTokens()
+    void persistResetToken(UniAsserter asserter) {
+        asserter.execute(() -> cleanUpResetTokens()
                 .chain(() -> {
                     ResetToken rt = new ResetToken();
                     rt.setToken("reset-token-001");
@@ -130,31 +124,29 @@ class AuthRepositoryTest {
                     return ResetToken.persist(rt).replaceWith(rt);
                 })
                 .invoke(saved -> assertThat(saved.id).isNotNull())
-                .replaceWithVoid();
+                .replaceWithVoid());
     }
 
     @Test
-    @WithSession
-    Uni<Void> findResetTokenByToken() {
-        return cleanUpResetTokens()
+    void findResetTokenByToken(UniAsserter asserter) {
+        asserter.execute(() -> cleanUpResetTokens()
                 .chain(() -> createResetToken("find-reset-token", 6L))
                 .chain(ignored -> resetTokenRepo.findByToken("find-reset-token"))
                 .invoke(found -> {
                     assertThat(found).isNotNull();
                     assertThat(found.getToken()).isEqualTo("find-reset-token");
                 })
-                .replaceWithVoid();
+                .replaceWithVoid());
     }
 
     @Test
-    @WithSession
-    Uni<Void> deleteResetTokenByUserId() {
-        return cleanUpResetTokens()
+    void deleteResetTokenByUserId(UniAsserter asserter) {
+        asserter.execute(() -> cleanUpResetTokens()
                 .chain(() -> createResetToken("reset-delete-user", 7L))
                 .chain(ignored -> resetTokenRepo.deleteByUserId(7L))
                 .invoke(deleted -> assertThat(deleted).isPositive())
                 .chain(ignored -> resetTokenRepo.findByToken("reset-delete-user"))
                 .invoke(found -> assertThat(found).isNull())
-                .replaceWithVoid();
+                .replaceWithVoid());
     }
 }

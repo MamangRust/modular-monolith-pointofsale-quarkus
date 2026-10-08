@@ -4,6 +4,7 @@ import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import io.opentelemetry.api.OpenTelemetry;
 import io.opentelemetry.api.metrics.LongCounter;
 import io.opentelemetry.api.metrics.Meter;
 import io.quarkus.redis.datasource.ReactiveRedisDataSource;
@@ -58,18 +59,23 @@ public class EmailDedupGuard {
     @Inject
     ReactiveRedisDataSource reactiveRedis;
 
+    // No CDI bean of type Meter exists — the meter must be obtained from the
+    // OpenTelemetry bean, same as EmailService does. Injecting Meter directly
+    // fails deployment with UnsatisfiedResolutionException.
     @Inject
-    Meter meter;
+    OpenTelemetry openTelemetry;
 
     private LongCounter claimFailedCounter;
 
     @PostConstruct
     void initMetrics() {
-        if (meter != null) {
-            claimFailedCounter = meter.counterBuilder("email_idempotency_claim_failed_total")
-                    .setDescription("Total idempotency claim failures (fail-open active, duplicate window unbounded)")
-                    .build();
+        if (openTelemetry == null) {
+            return;
         }
+        Meter meter = openTelemetry.getMeter("email-service");
+        claimFailedCounter = meter.counterBuilder("email_idempotency_claim_failed_total")
+                .setDescription("Total idempotency claim failures (fail-open active, duplicate window unbounded)")
+                .build();
     }
 
     @ConfigProperty(name = "email.idempotency.lease-seconds", defaultValue = "60")

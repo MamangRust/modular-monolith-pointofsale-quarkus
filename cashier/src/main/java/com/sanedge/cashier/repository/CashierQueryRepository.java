@@ -1,5 +1,7 @@
 package com.sanedge.cashier.repository;
 
+import com.sanedge.common.repository.PagedQuery;
+
 import com.sanedge.cashier.domain.requests.FindAllCashierMerchant;
 import com.sanedge.cashier.domain.requests.FindAllCashiers;
 import com.sanedge.common.domain.response.PagedResult;
@@ -27,9 +29,7 @@ public class CashierQueryRepository implements PanacheRepository<Cashier> {
         var panacheQuery = find(query, keyword)
                 .page(page, size);
 
-        return Uni.combine().all().unis(panacheQuery.list(), panacheQuery.count())
-                .asTuple()
-                .map(tuple -> new PagedResult<>(tuple.getItem1(), tuple.getItem2().intValue()));
+        return PagedQuery.fetch(panacheQuery);
     }
 
     public Uni<PagedResult<Cashier>> findByMerchants(FindAllCashierMerchant req) {
@@ -48,9 +48,7 @@ public class CashierQueryRepository implements PanacheRepository<Cashier> {
         var panacheQuery = find(query, merchantId, keyword)
                 .page(page, size);
 
-        return Uni.combine().all().unis(panacheQuery.list(), panacheQuery.count())
-                .asTuple()
-                .map(tuple -> new PagedResult<>(tuple.getItem1(), tuple.getItem2().intValue()));
+        return PagedQuery.fetch(panacheQuery);
     }
 
     public Uni<PagedResult<Cashier>> findActiveCashiers(FindAllCashiers req) {
@@ -67,9 +65,7 @@ public class CashierQueryRepository implements PanacheRepository<Cashier> {
         var panacheQuery = find(query, keyword)
                 .page(page, size);
 
-        return Uni.combine().all().unis(panacheQuery.list(), panacheQuery.count())
-                .asTuple()
-                .map(tuple -> new PagedResult<>(tuple.getItem1(), tuple.getItem2().intValue()));
+        return PagedQuery.fetch(panacheQuery);
     }
 
     public Uni<PagedResult<Cashier>> findTrashedCashiers(FindAllCashiers req) {
@@ -86,9 +82,7 @@ public class CashierQueryRepository implements PanacheRepository<Cashier> {
         var panacheQuery = find(query, keyword)
                 .page(page, size);
 
-        return Uni.combine().all().unis(panacheQuery.list(), panacheQuery.count())
-                .asTuple()
-                .map(tuple -> new PagedResult<>(tuple.getItem1(), tuple.getItem2().intValue()));
+        return PagedQuery.fetch(panacheQuery);
     }
 
     public Uni<Cashier> findByCashierId(Long cashierId) {

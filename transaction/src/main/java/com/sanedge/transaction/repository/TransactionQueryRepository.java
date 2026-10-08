@@ -1,5 +1,7 @@
 package com.sanedge.transaction.repository;
 
+import com.sanedge.common.repository.PagedQuery;
+
 import com.sanedge.common.domain.response.PagedResult;
 import com.sanedge.transaction.domain.requests.FindAllTransactionByMerchantRequest;
 import com.sanedge.transaction.domain.requests.FindAllTransactionRequest;
@@ -27,9 +29,7 @@ public class TransactionQueryRepository implements PanacheRepository<Transaction
         var panacheQuery = find(query, searchKeyword)
                 .page(pageIndex, size);
 
-        return Uni.combine().all().unis(panacheQuery.list(), panacheQuery.count())
-                .asTuple()
-                .map(tuple -> new PagedResult<>(tuple.getItem1(), tuple.getItem2().intValue()));
+        return PagedQuery.fetch(panacheQuery);
     }
 
     public Uni<PagedResult<Transaction>> findActiveTransactions(FindAllTransactionRequest req) {
@@ -48,9 +48,7 @@ public class TransactionQueryRepository implements PanacheRepository<Transaction
         var panacheQuery = find(query, searchKeyword)
                 .page(pageIndex, size);
 
-        return Uni.combine().all().unis(panacheQuery.list(), panacheQuery.count())
-                .asTuple()
-                .map(tuple -> new PagedResult<>(tuple.getItem1(), tuple.getItem2().intValue()));
+        return PagedQuery.fetch(panacheQuery);
     }
 
     public Uni<PagedResult<Transaction>> findTrashedTransactions(FindAllTransactionRequest req) {
@@ -69,9 +67,7 @@ public class TransactionQueryRepository implements PanacheRepository<Transaction
         var panacheQuery = find(query, searchKeyword)
                 .page(pageIndex, size);
 
-        return Uni.combine().all().unis(panacheQuery.list(), panacheQuery.count())
-                .asTuple()
-                .map(tuple -> new PagedResult<>(tuple.getItem1(), tuple.getItem2().intValue()));
+        return PagedQuery.fetch(panacheQuery);
     }
 
     public Uni<PagedResult<Transaction>> findTransactionsByMerchant(FindAllTransactionByMerchantRequest req) {
@@ -84,7 +80,7 @@ public class TransactionQueryRepository implements PanacheRepository<Transaction
                     deletedAt IS NULL
                     AND (CAST(?1 AS string) IS NULL
                         OR LOWER(paymentMethod) LIKE LOWER(CONCAT('%', ?1, '%'))
-                        OR CAST(status AS string) LIKE LOWER(CONCAT('%', ?1, '%')))
+                        OR LOWER(CAST(status AS string)) LIKE LOWER(CONCAT('%', ?1, '%')))
                     AND (CAST(?2 AS long) IS NULL OR merchantId = ?2)
                     ORDER BY createdAt DESC
                 """;
@@ -92,9 +88,7 @@ public class TransactionQueryRepository implements PanacheRepository<Transaction
         var panacheQuery = find(query, searchKeyword, merchantId)
                 .page(pageIndex, size);
 
-        return Uni.combine().all().unis(panacheQuery.list(), panacheQuery.count())
-                .asTuple()
-                .map(tuple -> new PagedResult<>(tuple.getItem1(), tuple.getItem2().intValue()));
+        return PagedQuery.fetch(panacheQuery);
     }
 
     public Uni<Transaction> findByTransactionId(Long transactionId) {

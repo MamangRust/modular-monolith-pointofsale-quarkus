@@ -12,14 +12,17 @@ import com.sanedge.product.domain.requests.FindAllProductByCategoryRequest;
 import com.sanedge.product.domain.requests.FindAllProductRequest;
 import com.sanedge.product.entity.Product;
 
-import io.quarkus.hibernate.reactive.panache.common.WithTransaction;
 import io.quarkus.test.junit.QuarkusTest;
-import io.quarkus.test.vertx.RunOnVertxContext;
+import io.quarkus.test.TestReactiveTransaction;
+import io.quarkus.test.vertx.UniAsserter;
 import io.smallrye.mutiny.Uni;
 import jakarta.inject.Inject;
+import com.sanedge.common.test.PostgreSqlResource;
+import io.quarkus.test.common.QuarkusTestResource;
 
 @QuarkusTest
-@RunOnVertxContext
+@QuarkusTestResource(PostgreSqlResource.class)
+@TestReactiveTransaction
 class ProductRepositoryTest {
 
     @Inject
@@ -78,9 +81,8 @@ class ProductRepositoryTest {
     // ==================== Basic CRUD ====================
 
     @Test
-    @WithTransaction
-    Uni<Void> testCreateAndFindById() {
-        return clean()
+    void testCreateAndFindById(UniAsserter asserter) {
+        asserter.execute(() -> clean()
                 .chain(() -> persistProduct("Product One", 10L, 100L, 5000, 20))
                 .chain(p -> queryRepo.findProductById(p.getProductId()))
                 .invoke(found -> {
@@ -90,24 +92,22 @@ class ProductRepositoryTest {
                     assertThat(found.getCategoryId()).isEqualTo(100L);
                     assertThat(found.getPrice()).isEqualTo(5000);
                 })
-                .replaceWithVoid();
+                .replaceWithVoid());
     }
 
     @Test
-    @WithTransaction
-    Uni<Void> testFindByIdReturnsNullWhenNotFound() {
-        return clean()
+    void testFindByIdReturnsNullWhenNotFound(UniAsserter asserter) {
+        asserter.execute(() -> clean()
                 .chain(() -> queryRepo.findProductById(99999L))
                 .invoke(found -> assertThat(found).isNull())
-                .replaceWithVoid();
+                .replaceWithVoid());
     }
 
     // ==================== Query - Search & Pagination ====================
 
     @Test
-    @WithTransaction
-    Uni<Void> testFindAllProductsWithSearch() {
-        return clean()
+    void testFindAllProductsWithSearch(UniAsserter asserter) {
+        asserter.execute(() -> clean()
                 .chain(() -> persistProduct("Alpha", 1L, 1L))
                 .chain(() -> persistProduct("Beta", 1L, 1L))
                 .chain(() -> persistProduct("Gamma", 1L, 1L))
@@ -116,13 +116,12 @@ class ProductRepositoryTest {
                     assertThat(result.getTotalRecords()).isEqualTo(1);
                     assertThat(result.getData().get(0).getName()).isEqualTo("Beta");
                 })
-                .replaceWithVoid();
+                .replaceWithVoid());
     }
 
     @Test
-    @WithTransaction
-    Uni<Void> testFindAllProductsPagination() {
-        return clean()
+    void testFindAllProductsPagination(UniAsserter asserter) {
+        asserter.execute(() -> clean()
                 .chain(() -> persistProduct("A", 1L, 1L))
                 .chain(() -> persistProduct("B", 1L, 1L))
                 .chain(() -> persistProduct("C", 1L, 1L))
@@ -135,27 +134,25 @@ class ProductRepositoryTest {
                 })
                 .chain(() -> queryRepo.findAllProducts(findAllReq(3, 2, "")))
                 .invoke(page3 -> assertThat(page3.getData()).hasSize(1))
-                .replaceWithVoid();
+                .replaceWithVoid());
     }
 
     // ==================== Active / Trashed filters ====================
 
     @Test
-    @WithTransaction
-    Uni<Void> testFindActiveProductsExcludesTrashed() {
-        return clean()
+    void testFindActiveProductsExcludesTrashed(UniAsserter asserter) {
+        asserter.execute(() -> clean()
                 .chain(() -> persistProduct("Active", 1L, 1L))
                 .chain(() -> persistProduct("ToTrash", 1L, 1L)
                         .chain(p -> commandRepo.trashed(p.getProductId()).replaceWithVoid()))
                 .chain(() -> queryRepo.findActiveProducts(findAllReq(1, 10, "")))
                 .invoke(result -> assertThat(result.getTotalRecords()).isEqualTo(1))
-                .replaceWithVoid();
+                .replaceWithVoid());
     }
 
     @Test
-    @WithTransaction
-    Uni<Void> testFindTrashedProductsOnlyTrashed() {
-        return clean()
+    void testFindTrashedProductsOnlyTrashed(UniAsserter asserter) {
+        asserter.execute(() -> clean()
                 .chain(() -> persistProduct("Stay", 1L, 1L))
                 .chain(() -> persistProduct("TrashMe", 1L, 1L)
                         .chain(p -> commandRepo.trashed(p.getProductId()).replaceWithVoid()))
@@ -164,15 +161,14 @@ class ProductRepositoryTest {
                     assertThat(result.getTotalRecords()).isEqualTo(1);
                     assertThat(result.getData().get(0).getName()).isEqualTo("TrashMe");
                 })
-                .replaceWithVoid();
+                .replaceWithVoid());
     }
 
     // ==================== findByMerchant ====================
 
     @Test
-    @WithTransaction
-    Uni<Void> testFindProductsByMerchant() {
-        return clean()
+    void testFindProductsByMerchant(UniAsserter asserter) {
+        asserter.execute(() -> clean()
                 .chain(() -> persistProduct("P1", 100L, 10L))
                 .chain(() -> persistProduct("P2", 100L, 20L))
                 .chain(() -> persistProduct("P3", 200L, 10L))
@@ -181,13 +177,12 @@ class ProductRepositoryTest {
                     assertThat(result.getTotalRecords()).isEqualTo(2);
                     assertThat(result.getData().stream().allMatch(p -> p.getMerchantId().equals(100L))).isTrue();
                 })
-                .replaceWithVoid();
+                .replaceWithVoid());
     }
 
     @Test
-    @WithTransaction
-    Uni<Void> testFindProductsByMerchantWithCategoryAndPriceFilter() {
-        return clean()
+    void testFindProductsByMerchantWithCategoryAndPriceFilter(UniAsserter asserter) {
+        asserter.execute(() -> clean()
                 .chain(() -> persistProduct("Cheap", 100L, 10L, 50, 100))
                 .chain(() -> persistProduct("Mid",   100L, 20L, 200, 100))
                 .chain(() -> persistProduct("Exp",   100L, 20L, 500, 100))
@@ -202,43 +197,40 @@ class ProductRepositoryTest {
                     assertThat(result.getTotalRecords()).isEqualTo(1);
                     assertThat(result.getData().get(0).getName()).isEqualTo("Mid");
                 })
-                .replaceWithVoid();
+                .replaceWithVoid());
     }
 
     // ==================== findByCategory ====================
 
     @Test
-    @WithTransaction
-    Uni<Void> testFindProductsByCategory() {
-        return clean()
+    void testFindProductsByCategory(UniAsserter asserter) {
+        asserter.execute(() -> clean()
                 .chain(() -> persistProduct("Phone", 1L, 50L))  // categoryId=50 assumed to be "Electronics"
                 .chain(() -> persistProduct("Tablet", 1L, 51L))
                 .chain(() -> queryRepo.findProductsByCategory(findAllByCategoryReq("Electronics", 1, 10, "")))
                 .invoke(result -> {
                     assertThat(result).isNotNull();
                 })
-                .replaceWithVoid();
+                .replaceWithVoid());
     }
 
     // ==================== Soft Delete (Trash) ====================
 
     @Test
-    @WithTransaction
-    Uni<Void> testTrashProduct() {
-        return clean()
+    void testTrashProduct(UniAsserter asserter) {
+        asserter.execute(() -> clean()
                 .chain(() -> persistProduct("Trash", 1L, 1L))
                 .chain(p -> commandRepo.trashed(p.getProductId()))
                 .invoke(trashed -> {
                     assertThat(trashed).isNotNull();
                     assertThat(trashed.getDeletedAt()).isNotNull();
                 })
-                .replaceWithVoid();
+                .replaceWithVoid());
     }
 
     @Test
-    @WithTransaction
-    Uni<Void> testTrashAlreadyTrashedReturnsSame() {
-        return clean()
+    void testTrashAlreadyTrashedReturnsSame(UniAsserter asserter) {
+        asserter.execute(() -> clean()
                 .chain(() -> persistProduct("Double", 1L, 1L))
                 .chain(p -> commandRepo.trashed(p.getProductId())
                         .chain(() -> commandRepo.trashed(p.getProductId())))
@@ -246,13 +238,12 @@ class ProductRepositoryTest {
                     assertThat(second).isNotNull();
                     assertThat(second.getDeletedAt()).isNotNull();
                 })
-                .replaceWithVoid();
+                .replaceWithVoid());
     }
 
     @Test
-    @WithTransaction
-    Uni<Void> testRestoreProduct() {
-        return clean()
+    void testRestoreProduct(UniAsserter asserter) {
+        asserter.execute(() -> clean()
                 .chain(() -> persistProduct("Restore", 1L, 1L))
                 .chain(p -> commandRepo.trashed(p.getProductId())
                         .chain(() -> commandRepo.restore(p.getProductId())))
@@ -260,62 +251,57 @@ class ProductRepositoryTest {
                     assertThat(restored).isNotNull();
                     assertThat(restored.getDeletedAt()).isNull();
                 })
-                .replaceWithVoid();
+                .replaceWithVoid());
     }
 
     @Test
-    @WithTransaction
-    Uni<Void> testRestoreNotTrashedReturnsNull() {
-        return clean()
+    void testRestoreNotTrashedReturnsNull(UniAsserter asserter) {
+        asserter.execute(() -> clean()
                 .chain(() -> persistProduct("ActiveR", 1L, 1L))
                 .chain(p -> commandRepo.restore(p.getProductId()))
                 .invoke(result -> assertThat(result).isNull())
-                .replaceWithVoid();
+                .replaceWithVoid());
     }
 
     // ==================== Permanent Delete ====================
 
     @Test
-    @WithTransaction
-    Uni<Void> testDeletePermanentAfterTrash() {
-        return clean()
+    void testDeletePermanentAfterTrash(UniAsserter asserter) {
+        asserter.execute(() -> clean()
                 .chain(() -> persistProduct("DelPerm", 1L, 1L))
                 .chain(p -> commandRepo.trashed(p.getProductId())
                         .chain(() -> commandRepo.deletePermanent(p.getProductId()))
                         .chain(perm -> queryRepo.findProductById(p.getProductId())))
                 .invoke(found -> assertThat(found).isNull())
-                .replaceWithVoid();
+                .replaceWithVoid());
     }
 
     @Test
-    @WithTransaction
-    Uni<Void> testDeletePermanentActiveReturnsNull() {
-        return clean()
+    void testDeletePermanentActiveReturnsNull(UniAsserter asserter) {
+        asserter.execute(() -> clean()
                 .chain(() -> persistProduct("ActiveDel", 1L, 1L))
                 .chain(p -> commandRepo.deletePermanent(p.getProductId()))
                 .invoke(result -> assertThat(result).isNull())
-                .replaceWithVoid();
+                .replaceWithVoid());
     }
 
     // ==================== Bulk Operations ====================
 
     @Test
-    @WithTransaction
-    Uni<Void> testRestoreAllDeleted() {
-        return clean()
+    void testRestoreAllDeleted(UniAsserter asserter) {
+        asserter.execute(() -> clean()
                 .chain(() -> persistProduct("A1", 1L, 1L).chain(p -> commandRepo.trashed(p.getProductId()).replaceWithVoid()))
                 .chain(() -> persistProduct("A2", 1L, 1L).chain(p -> commandRepo.trashed(p.getProductId()).replaceWithVoid()))
                 .chain(() -> commandRepo.restoreAllDeleted())
                 .invoke(result -> assertThat(result).isTrue())
                 .chain(() -> queryRepo.findTrashedProducts(findAllReq(1, 10, "")))
                 .invoke(trashed -> assertThat(trashed.getTotalRecords()).isEqualTo(0))
-                .replaceWithVoid();
+                .replaceWithVoid());
     }
 
     @Test
-    @WithTransaction
-    Uni<Void> testDeleteAllDeleted() {
-        return clean()
+    void testDeleteAllDeleted(UniAsserter asserter) {
+        asserter.execute(() -> clean()
                 .chain(() -> persistProduct("D1", 1L, 1L).chain(p -> commandRepo.trashed(p.getProductId()).replaceWithVoid()))
                 .chain(() -> persistProduct("D2", 1L, 1L).chain(p -> commandRepo.trashed(p.getProductId()).replaceWithVoid()))
                 .chain(() -> persistProduct("Keep", 1L, 1L))
@@ -323,31 +309,29 @@ class ProductRepositoryTest {
                 .invoke(result -> assertThat(result).isTrue())
                 .chain(() -> queryRepo.findActiveProducts(findAllReq(1, 10, "")))
                 .invoke(active -> assertThat(active.getTotalRecords()).isEqualTo(1))
-                .replaceWithVoid();
+                .replaceWithVoid());
     }
 
     // ==================== Edge Cases ====================
 
     @Test
-    @WithTransaction
-    Uni<Void> testEmptyDatabaseReturnsZeroRecords() {
-        return clean()
+    void testEmptyDatabaseReturnsZeroRecords(UniAsserter asserter) {
+        asserter.execute(() -> clean()
                 .chain(() -> queryRepo.findAllProducts(findAllReq(1, 10, "")))
                 .invoke(r -> assertThat(r.getTotalRecords()).isZero())
                 .chain(() -> queryRepo.findActiveProducts(findAllReq(1, 10, "")))
                 .invoke(r -> assertThat(r.getTotalRecords()).isZero())
                 .chain(() -> queryRepo.findTrashedProducts(findAllReq(1, 10, "")))
                 .invoke(r -> assertThat(r.getTotalRecords()).isZero())
-                .replaceWithVoid();
+                .replaceWithVoid());
     }
 
     @Test
-    @WithTransaction
-    Uni<Void> testSearchNoMatchReturnsZero() {
-        return clean()
+    void testSearchNoMatchReturnsZero(UniAsserter asserter) {
+        asserter.execute(() -> clean()
                 .chain(() -> persistProduct("Something", 1L, 1L))
                 .chain(() -> queryRepo.findAllProducts(findAllReq(1, 10, "NOMATCH")))
                 .invoke(r -> assertThat(r.getTotalRecords()).isZero())
-                .replaceWithVoid();
+                .replaceWithVoid());
     }
 }

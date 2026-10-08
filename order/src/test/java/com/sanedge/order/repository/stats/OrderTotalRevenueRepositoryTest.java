@@ -7,23 +7,26 @@ import org.junit.jupiter.api.Test;
 
 import com.sanedge.order.domain.requests.FindOrderMonthRange;
 
-import io.quarkus.hibernate.reactive.panache.common.WithSession;
 import io.quarkus.test.junit.QuarkusTest;
-import io.quarkus.test.vertx.RunOnVertxContext;
+import io.quarkus.test.TestReactiveTransaction;
+import io.quarkus.test.vertx.UniAsserter;
 import io.smallrye.mutiny.Uni;
 import jakarta.inject.Inject;
+import com.sanedge.common.test.PostgreSqlResource;
+import io.quarkus.test.common.QuarkusTestResource;
 
 @Disabled("Requires PostgreSQL-specific functions; enable after verifying DB compatibility")
 @QuarkusTest
-@RunOnVertxContext
+@QuarkusTestResource(PostgreSqlResource.class)
+@TestReactiveTransaction
 class OrderTotalRevenueRepositoryTest {
 
     @Inject
     OrderTotalRevenueRepository repository;
 
     @Test
-    @WithSession
-    Uni<Void> testFindMonthlyTotalRevenue_ReturnsTwoMonthsWithZeroRevenue() {
+    void testFindMonthlyTotalRevenue_ReturnsTwoMonthsWithZeroRevenue(UniAsserter asserter) {
+        asserter.execute(() -> {
         FindOrderMonthRange req = new FindOrderMonthRange();
         req.setStartYear(2024);
         req.setStartMonth(6);
@@ -38,12 +41,11 @@ class OrderTotalRevenueRepositoryTest {
                             assertThat(month.getTotalRevenue()).isEqualTo(0));
                 })
                 .replaceWithVoid();
-    }
+    });}
 
     @Test
-    @WithSession
-    Uni<Void> testFindYearlyTotalRevenue_ReturnsTwoYearsWithZeroRevenue() {
-        return repository.findYearlyTotalRevenue(2024)
+    void testFindYearlyTotalRevenue_ReturnsTwoYearsWithZeroRevenue(UniAsserter asserter) {
+        asserter.execute(() -> repository.findYearlyTotalRevenue(2024)
                 .invoke(result -> {
                     assertThat(result).isNotNull();
                     assertThat(result).hasSize(2);
@@ -52,6 +54,6 @@ class OrderTotalRevenueRepositoryTest {
                         assertThat(year.getTotalRevenue()).isEqualTo(0);
                     });
                 })
-                .replaceWithVoid();
+                .replaceWithVoid());
     }
 }

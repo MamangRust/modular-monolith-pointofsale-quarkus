@@ -36,7 +36,7 @@ public class MerchantCommandRepository implements PanacheRepository<Merchant> {
 
     @WithTransaction
     public Uni<Boolean> deletePermanent(Long merchantId) {
-        return find("merchantId = ?1", merchantId).firstResult()
+        return find("merchantId = ?1 AND deletedAt IS NOT NULL", merchantId).firstResult()
                 .chain(merchant -> {
                     if (merchant != null) {
                         return delete(merchant).map(v -> true);

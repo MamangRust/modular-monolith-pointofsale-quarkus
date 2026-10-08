@@ -1,5 +1,7 @@
 package com.sanedge.product.repository;
 
+import com.sanedge.common.repository.PagedQuery;
+
 import com.sanedge.product.domain.requests.FindAllProductByMerchantRequest;
 import com.sanedge.product.domain.requests.FindAllProductRequest;
 import com.sanedge.product.domain.requests.FindAllProductByCategoryRequest;
@@ -25,9 +27,7 @@ public class ProductQueryRepository implements PanacheRepository<Product> {
         var panacheQuery = find(query, searchKeyword)
                 .page(pageIndex, req.getPageSize());
 
-        return Uni.combine().all().unis(panacheQuery.list(), panacheQuery.count())
-                .asTuple()
-                .map(tuple -> new PagedResult<>(tuple.getItem1(), tuple.getItem2().intValue()));
+        return PagedQuery.fetch(panacheQuery);
     }
 
     public Uni<PagedResult<Product>> findActiveProducts(FindAllProductRequest req) {
@@ -43,9 +43,7 @@ public class ProductQueryRepository implements PanacheRepository<Product> {
         var panacheQuery = find(query, searchKeyword)
                 .page(pageIndex, req.getPageSize());
 
-        return Uni.combine().all().unis(panacheQuery.list(), panacheQuery.count())
-                .asTuple()
-                .map(tuple -> new PagedResult<>(tuple.getItem1(), tuple.getItem2().intValue()));
+        return PagedQuery.fetch(panacheQuery);
     }
 
     public Uni<PagedResult<Product>> findTrashedProducts(FindAllProductRequest req) {
@@ -61,9 +59,7 @@ public class ProductQueryRepository implements PanacheRepository<Product> {
         var panacheQuery = find(query, searchKeyword)
                 .page(pageIndex, req.getPageSize());
 
-        return Uni.combine().all().unis(panacheQuery.list(), panacheQuery.count())
-                .asTuple()
-                .map(tuple -> new PagedResult<>(tuple.getItem1(), tuple.getItem2().intValue()));
+        return PagedQuery.fetch(panacheQuery);
     }
 
     public Uni<Product> findProductById(Long productId) {
@@ -92,9 +88,7 @@ public class ProductQueryRepository implements PanacheRepository<Product> {
         var panacheQuery = find(query, merchantId, searchKeyword, categoryId, minPrice, maxPrice)
                 .page(pageIndex, size);
 
-        return Uni.combine().all().unis(panacheQuery.list(), panacheQuery.count())
-                .asTuple()
-                .map(tuple -> new PagedResult<>(tuple.getItem1(), tuple.getItem2().intValue()));
+        return PagedQuery.fetch(panacheQuery);
     }
 
     public Uni<PagedResult<Product>> findProductsByCategory(FindAllProductByCategoryRequest req) {
@@ -115,8 +109,6 @@ public class ProductQueryRepository implements PanacheRepository<Product> {
         var panacheQuery = find(query, req.getCategoryName(), searchKeyword, req.getMinPrice(), req.getMaxPrice())
                 .page(pageIndex, req.getPageSize());
 
-        return Uni.combine().all().unis(panacheQuery.list(), panacheQuery.count())
-                .asTuple()
-                .map(tuple -> new PagedResult<>(tuple.getItem1(), tuple.getItem2().intValue()));
+        return PagedQuery.fetch(panacheQuery);
     }
 }

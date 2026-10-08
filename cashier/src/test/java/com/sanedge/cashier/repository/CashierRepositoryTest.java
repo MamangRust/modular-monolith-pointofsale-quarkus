@@ -2,25 +2,23 @@ package com.sanedge.cashier.repository;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import org.junit.jupiter.api.MethodOrderer;
-import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.TestMethodOrder;
 
+import com.sanedge.cashier.domain.requests.FindAllCashierMerchant;
+import com.sanedge.cashier.domain.requests.FindAllCashiers;
 import com.sanedge.cashier.entity.Cashier;
 import com.sanedge.common.test.PostgreSqlResource;
 
-import io.quarkus.hibernate.reactive.panache.common.WithSession;
 import io.quarkus.test.common.QuarkusTestResource;
 import io.quarkus.test.junit.QuarkusTest;
-import io.quarkus.test.vertx.RunOnVertxContext;
+import io.quarkus.test.TestReactiveTransaction;
+import io.quarkus.test.vertx.UniAsserter;
 import io.smallrye.mutiny.Uni;
 import jakarta.inject.Inject;
 
 @QuarkusTest
 @QuarkusTestResource(PostgreSqlResource.class)
-@TestMethodOrder(MethodOrderer.OrderAnnotation.class)
-@RunOnVertxContext
+@TestReactiveTransaction
 class CashierRepositoryTest {
 
     @Inject
@@ -29,20 +27,43 @@ class CashierRepositoryTest {
     @Inject
     CashierQueryRepository cashierQueryRepository;
 
-    private Cashier createCashier(String name, Long merchantId, Long userId) {
+    // ---------- helpers ----------
+
+    private Uni<Void> clean() {
+        return cashierCommandRepository.deleteAll().replaceWithVoid();
+    }
+
+    private Uni<Cashier> persistCashier(String name, Long merchantId, Long userId) {
         Cashier cashier = new Cashier();
         cashier.setName(name);
         cashier.setMerchantId(merchantId);
         cashier.setUserId(userId);
-        return cashier;
+        return cashierCommandRepository.persist(cashier);
     }
 
+    private FindAllCashiers findAllReq(int page, int size, String search) {
+        FindAllCashiers req = new FindAllCashiers();
+        req.setPage(page);
+        req.setPageSize(size);
+        req.setSearch(search);
+        return req;
+    }
+
+    private FindAllCashierMerchant findByMerchantReq(Integer merchantId, int page, int size, String search) {
+        FindAllCashierMerchant req = new FindAllCashierMerchant();
+        req.setMerchantId(merchantId);
+        req.setPage(page);
+        req.setPageSize(size);
+        req.setSearch(search);
+        return req;
+    }
+
+    // ---------- tests ----------
+
     @Test
-    @Order(1)
-    @WithSession
-    Uni<Void> testCreateCashier_success() {
-        Cashier cashier = createCashier("Cashier One", 1L, 1L);
-        return cashierCommandRepository.persist(cashier)
+    void testCreateCashier_success(UniAsserter asserter) {
+        asserter.execute(() -> clean()
+                .chain(() -> persistCashier("Cashier One", 1L, 1L))
                 .invoke(persisted -> {
                     assertThat(persisted).isNotNull();
                     assertThat(persisted.getCashierId()).isNotNull();
@@ -52,235 +73,210 @@ class CashierRepositoryTest {
                     assertThat(persisted.getCreatedAt()).isNotNull();
                     assertThat(persisted.getUpdatedAt()).isNotNull();
                 })
-                .replaceWithVoid();
+                .replaceWithVoid());
     }
 
     @Test
-    @Order(2)
-    @WithSession
-    Uni<Void> testFindByCashierId_exists() {
-        return cashierQueryRepository.findByCashierId(1L)
+    void testFindByCashierId_exists(UniAsserter asserter) {
+        asserter.execute(() -> clean()
+                .chain(() -> persistCashier("Cashier One", 1L, 1L))
+                .chain(saved -> cashierQueryRepository.findByCashierId(saved.getCashierId()))
                 .invoke(found -> {
                     assertThat(found).isNotNull();
                     assertThat(found.getName()).isEqualTo("Cashier One");
                 })
-                .replaceWithVoid();
+                .replaceWithVoid());
     }
 
     @Test
-    @Order(3)
-    @WithSession
-    Uni<Void> testFindByCashierId_notFound() {
-        return cashierQueryRepository.findByCashierId(999L)
+    void testFindByCashierId_notFound(UniAsserter asserter) {
+        asserter.execute(() -> clean()
+                .chain(() -> cashierQueryRepository.findByCashierId(999L))
                 .invoke(found -> assertThat(found).isNull())
-                .replaceWithVoid();
+                .replaceWithVoid());
     }
 
     @Test
-    @Order(4)
-    @WithSession
-    Uni<Void> testFindByNameAndMerchantId_exists() {
-        return cashierQueryRepository.findByNameAndMerchantId("Cashier One", 1L)
+    void testFindByNameAndMerchantId_exists(UniAsserter asserter) {
+        asserter.execute(() -> clean()
+                .chain(() -> persistCashier("Cashier One", 1L, 1L))
+                .chain(() -> cashierQueryRepository.findByNameAndMerchantId("Cashier One", 1L))
                 .invoke(found -> {
                     assertThat(found).isNotNull();
                     assertThat(found.getName()).isEqualTo("Cashier One");
                 })
-                .replaceWithVoid();
+                .replaceWithVoid());
     }
 
     @Test
-    @Order(5)
-    @WithSession
-    Uni<Void> testFindByNameAndMerchantId_caseInsensitive() {
-        return cashierQueryRepository.findByNameAndMerchantId("cashier one", 1L)
+    void testFindByNameAndMerchantId_caseInsensitive(UniAsserter asserter) {
+        asserter.execute(() -> clean()
+                .chain(() -> persistCashier("Cashier One", 1L, 1L))
+                .chain(() -> cashierQueryRepository.findByNameAndMerchantId("cashier one", 1L))
                 .invoke(found -> assertThat(found).isNotNull())
-                .replaceWithVoid();
+                .replaceWithVoid());
     }
 
     @Test
-    @Order(6)
-    @WithSession
-    Uni<Void> testFindByNameAndMerchantId_notFound() {
-        return cashierQueryRepository.findByNameAndMerchantId("NonExistent", 1L)
+    void testFindByNameAndMerchantId_notFound(UniAsserter asserter) {
+        asserter.execute(() -> clean()
+                .chain(() -> persistCashier("Cashier One", 1L, 1L))
+                .chain(() -> cashierQueryRepository.findByNameAndMerchantId("NonExistent", 1L))
                 .invoke(found -> assertThat(found).isNull())
-                .replaceWithVoid();
+                .replaceWithVoid());
     }
 
     @Test
-    @Order(7)
-    @WithSession
-    Uni<Void> testCreateSecondCashier() {
-        Cashier cashier = createCashier("Cashier Two", 2L, 2L);
-        return cashierCommandRepository.persist(cashier)
-                .invoke(persisted -> {
-                    assertThat(persisted).isNotNull();
-                    assertThat(persisted.getCashierId()).isNotNull();
-                })
-                .replaceWithVoid();
-    }
-
-    @Test
-    @Order(8)
-    @WithSession
-    Uni<Void> testFindAllCashiers_paginationAndSearch() {
-        var req = new com.sanedge.cashier.domain.requests.FindAllCashiers();
-        req.setPage(1);
-        req.setPageSize(10);
-        req.setSearch(null);
-
-        return cashierQueryRepository.findAllCashiers(req)
+    void testFindAllCashiers_paginationAndSearch(UniAsserter asserter) {
+        asserter.execute(() -> clean()
+                .chain(() -> persistCashier("Cashier One", 1L, 1L))
+                .chain(() -> persistCashier("Cashier Two", 2L, 2L))
+                .chain(() -> cashierQueryRepository.findAllCashiers(findAllReq(1, 10, null)))
                 .invoke(pagedResult -> {
                     assertThat(pagedResult).isNotNull();
                     assertThat(pagedResult.getData()).hasSize(2);
                     assertThat(pagedResult.getTotalRecords()).isEqualTo(2);
                 })
-                .replaceWithVoid();
+                .replaceWithVoid());
     }
 
     @Test
-    @Order(9)
-    @WithSession
-    Uni<Void> testFindAllCashiers_withSearchKeyword() {
-        var req = new com.sanedge.cashier.domain.requests.FindAllCashiers();
-        req.setPage(1);
-        req.setPageSize(10);
-        req.setSearch("One");
-
-        return cashierQueryRepository.findAllCashiers(req)
+    void testFindAllCashiers_withSearchKeyword(UniAsserter asserter) {
+        asserter.execute(() -> clean()
+                .chain(() -> persistCashier("Cashier One", 1L, 1L))
+                .chain(() -> persistCashier("Cashier Two", 2L, 2L))
+                .chain(() -> cashierQueryRepository.findAllCashiers(findAllReq(1, 10, "One")))
                 .invoke(pagedResult -> {
                     assertThat(pagedResult).isNotNull();
                     assertThat(pagedResult.getData()).hasSize(1);
                     assertThat(pagedResult.getData().get(0).getName()).isEqualTo("Cashier One");
                 })
-                .replaceWithVoid();
+                .replaceWithVoid());
     }
 
     @Test
-    @Order(10)
-    @WithSession
-    Uni<Void> testTrashCashier_success() {
-        return cashierCommandRepository.trashed(1L)
+    void testTrashCashier_success(UniAsserter asserter) {
+        asserter.execute(() -> clean()
+                .chain(() -> persistCashier("Cashier One", 1L, 1L))
+                .chain(saved -> cashierCommandRepository.trashed(saved.getCashierId()))
                 .invoke(trashed -> {
                     assertThat(trashed).isNotNull();
                     assertThat(trashed.getDeletedAt()).isNotNull();
                 })
-                .replaceWithVoid();
+                .replaceWithVoid());
     }
 
     @Test
-    @Order(11)
-    @WithSession
-    Uni<Void> testTrashCashier_alreadyTrashed_returnsSame() {
-        return cashierCommandRepository.trashed(1L)
-                .invoke(trashed -> {
-                    assertThat(trashed).isNotNull();
-                    assertThat(trashed.getDeletedAt()).isNotNull();
+    void testTrashCashier_alreadyTrashed_returnsSame(UniAsserter asserter) {
+        asserter.execute(() -> clean()
+                .chain(() -> persistCashier("Cashier One", 1L, 1L))
+                .chain(saved -> cashierCommandRepository.trashed(saved.getCashierId())
+                        .chain(ignored -> cashierCommandRepository.trashed(saved.getCashierId())))
+                .invoke(trashedAgain -> {
+                    assertThat(trashedAgain).isNotNull();
+                    assertThat(trashedAgain.getDeletedAt()).isNotNull();
                 })
-                .replaceWithVoid();
+                .replaceWithVoid());
     }
 
     @Test
-    @Order(12)
-    @WithSession
-    Uni<Void> testFindActiveCashiers_onlyActive() {
-        var req = new com.sanedge.cashier.domain.requests.FindAllCashiers();
-        req.setPage(1);
-        req.setPageSize(10);
-        req.setSearch(null);
-
-        return cashierQueryRepository.findActiveCashiers(req)
+    void testFindActiveCashiers_onlyActive(UniAsserter asserter) {
+        asserter.execute(() -> clean()
+                .chain(() -> persistCashier("Cashier One", 1L, 1L))
+                .chain(first -> persistCashier("Cashier Two", 2L, 2L)
+                        .chain(second -> cashierCommandRepository.trashed(first.getCashierId())
+                                .replaceWith(second)))
+                .chain(() -> cashierQueryRepository.findActiveCashiers(findAllReq(1, 10, null)))
                 .invoke(pagedResult -> {
                     assertThat(pagedResult).isNotNull();
                     assertThat(pagedResult.getData()).hasSize(1);
                     assertThat(pagedResult.getData().get(0).getName()).isEqualTo("Cashier Two");
                 })
-                .replaceWithVoid();
+                .replaceWithVoid());
     }
 
     @Test
-    @Order(13)
-    @WithSession
-    Uni<Void> testFindTrashedCashiers_onlyTrashed() {
-        var req = new com.sanedge.cashier.domain.requests.FindAllCashiers();
-        req.setPage(1);
-        req.setPageSize(10);
-        req.setSearch(null);
-
-        return cashierQueryRepository.findTrashedCashiers(req)
+    void testFindTrashedCashiers_onlyTrashed(UniAsserter asserter) {
+        asserter.execute(() -> clean()
+                .chain(() -> persistCashier("Cashier One", 1L, 1L))
+                .chain(first -> persistCashier("Cashier Two", 2L, 2L)
+                        .chain(second -> cashierCommandRepository.trashed(first.getCashierId())
+                                .replaceWith(second)))
+                .chain(() -> cashierQueryRepository.findTrashedCashiers(findAllReq(1, 10, null)))
                 .invoke(pagedResult -> {
                     assertThat(pagedResult).isNotNull();
                     assertThat(pagedResult.getData()).hasSize(1);
                     assertThat(pagedResult.getData().get(0).getName()).isEqualTo("Cashier One");
                 })
-                .replaceWithVoid();
+                .replaceWithVoid());
     }
 
     @Test
-    @Order(14)
-    @WithSession
-    Uni<Void> testRestoreCashier_success() {
-        return cashierCommandRepository.restore(1L)
+    void testRestoreCashier_success(UniAsserter asserter) {
+        asserter.execute(() -> clean()
+                .chain(() -> persistCashier("Cashier One", 1L, 1L))
+                .chain(saved -> cashierCommandRepository.trashed(saved.getCashierId())
+                        .chain(ignored -> cashierCommandRepository.restore(saved.getCashierId())))
                 .invoke(restored -> {
                     assertThat(restored).isNotNull();
                     assertThat(restored.getDeletedAt()).isNull();
                 })
-                .replaceWithVoid();
+                .replaceWithVoid());
     }
 
     @Test
-    @Order(15)
-    @WithSession
-    Uni<Void> testRestoreCashier_notFound() {
-        return cashierCommandRepository.restore(999L)
+    void testRestoreCashier_notFound(UniAsserter asserter) {
+        asserter.execute(() -> clean()
+                .chain(() -> cashierCommandRepository.restore(999L))
                 .invoke(restored -> assertThat(restored).isNull())
-                .replaceWithVoid();
+                .replaceWithVoid());
     }
 
     @Test
-    @Order(16)
-    @WithSession
-    Uni<Void> testFindByMerchants_withMerchantAndSearch() {
-        var req = new com.sanedge.cashier.domain.requests.FindAllCashierMerchant();
-        req.setMerchantId(1);
-        req.setPage(1);
-        req.setPageSize(10);
-        req.setSearch(null);
-
-        return cashierQueryRepository.findByMerchants(req)
+    void testFindByMerchants_withMerchantAndSearch(UniAsserter asserter) {
+        asserter.execute(() -> clean()
+                .chain(() -> persistCashier("Cashier One", 1L, 1L))
+                .chain(() -> persistCashier("Cashier Two", 2L, 2L))
+                .chain(() -> cashierQueryRepository.findByMerchants(findByMerchantReq(1, 1, 10, null)))
                 .invoke(pagedResult -> {
                     assertThat(pagedResult).isNotNull();
                     assertThat(pagedResult.getData()).hasSize(1);
+                    assertThat(pagedResult.getData().get(0).getName()).isEqualTo("Cashier One");
                 })
-                .replaceWithVoid();
+                .replaceWithVoid());
     }
 
     @Test
-    @Order(17)
-    @WithSession
-    Uni<Void> testTrashSecondCashier() {
-        return cashierCommandRepository.trashed(2L)
+    void testTrashSecondCashier(UniAsserter asserter) {
+        asserter.execute(() -> clean()
+                .chain(() -> persistCashier("Cashier One", 1L, 1L))
+                .chain(first -> persistCashier("Cashier Two", 2L, 2L))
+                .chain(second -> cashierCommandRepository.trashed(second.getCashierId()))
                 .invoke(trashed -> {
                     assertThat(trashed).isNotNull();
                     assertThat(trashed.getDeletedAt()).isNotNull();
                 })
-                .replaceWithVoid();
+                .replaceWithVoid());
     }
 
     @Test
-    @Order(18)
-    @WithSession
-    Uni<Void> testRestoreAllDeleted_success() {
-        return cashierCommandRepository.restoreAllDeleted()
+    void testRestoreAllDeleted_success(UniAsserter asserter) {
+        asserter.execute(() -> clean()
+                .chain(() -> persistCashier("Cashier One", 1L, 1L))
+                .chain(first -> persistCashier("Cashier Two", 2L, 2L)
+                        .chain(second -> cashierCommandRepository.trashed(first.getCashierId())
+                                .chain(ignored -> cashierCommandRepository.trashed(second.getCashierId()))))
+                .chain(() -> cashierCommandRepository.restoreAllDeleted())
                 .invoke(result -> assertThat(result).isTrue())
-                .replaceWithVoid();
+                .replaceWithVoid());
     }
 
     @Test
-    @Order(19)
-    @WithSession
-    Uni<Void> testRestoreAllDeleted_whenNoneTrashed_returnsFalse() {
-        return cashierCommandRepository.restoreAllDeleted()
+    void testRestoreAllDeleted_whenNoneTrashed_returnsFalse(UniAsserter asserter) {
+        asserter.execute(() -> clean()
+                .chain(() -> persistCashier("Cashier One", 1L, 1L))
+                .chain(() -> cashierCommandRepository.restoreAllDeleted())
                 .invoke(result -> assertThat(result).isFalse())
-                .replaceWithVoid();
+                .replaceWithVoid());
     }
 }

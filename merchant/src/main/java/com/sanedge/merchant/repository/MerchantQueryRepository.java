@@ -1,5 +1,7 @@
 package com.sanedge.merchant.repository;
 
+import com.sanedge.common.repository.PagedQuery;
+
 import java.util.List;
 
 import com.sanedge.common.domain.response.PagedResult;
@@ -32,9 +34,7 @@ public class MerchantQueryRepository implements PanacheRepository<Merchant> {
         var panacheQuery = find(query, Sort.ascending("merchantId"), searchKeyword)
                 .page(pageIndex, req.getPageSize());
 
-        return Uni.combine().all().unis(panacheQuery.list(), panacheQuery.count())
-                .asTuple()
-                .map(tuple -> new PagedResult<>(tuple.getItem1(), tuple.getItem2().intValue()));
+        return PagedQuery.fetch(panacheQuery);
     }
 
     public Uni<PagedResult<Merchant>> findActiveMerchants(FindAllMerchants req) {
@@ -54,9 +54,7 @@ public class MerchantQueryRepository implements PanacheRepository<Merchant> {
         var panacheQuery = find(query, Sort.ascending("merchantId"), searchKeyword)
                 .page(pageIndex, req.getPageSize());
 
-        return Uni.combine().all().unis(panacheQuery.list(), panacheQuery.count())
-                .asTuple()
-                .map(tuple -> new PagedResult<>(tuple.getItem1(), tuple.getItem2().intValue()));
+        return PagedQuery.fetch(panacheQuery);
     }
 
     public Uni<PagedResult<Merchant>> findTrashedMerchants(FindAllMerchants req) {
@@ -76,9 +74,7 @@ public class MerchantQueryRepository implements PanacheRepository<Merchant> {
         var panacheQuery = find(query, Sort.descending("merchantId"), searchKeyword)
                 .page(pageIndex, req.getPageSize());
 
-        return Uni.combine().all().unis(panacheQuery.list(), panacheQuery.count())
-                .asTuple()
-                .map(tuple -> new PagedResult<>(tuple.getItem1(), tuple.getItem2().intValue()));
+        return PagedQuery.fetch(panacheQuery);
     }
 
     public Uni<Merchant> findMerchantById(Long merchantId) {

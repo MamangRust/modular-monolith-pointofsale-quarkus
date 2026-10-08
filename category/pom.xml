@@ -27,6 +27,27 @@
             <artifactId>common</artifactId>
         </dependency>
 
+
+        <dependency>
+            <groupId>com.sanedge</groupId>
+            <artifactId>common</artifactId>
+            <type>test-jar</type>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- Testcontainers (used by PostgreSqlResource from common test-jar) -->
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>testcontainers</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>postgresql</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+
         <!-- Redis client (exclude devservices to avoid JUnit 4 TestRule requirement) -->
         <dependency>
             <groupId>io.quarkus</groupId>

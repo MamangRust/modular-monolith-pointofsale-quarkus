@@ -1,5 +1,7 @@
 package com.sanedge.merchant.repository;
 
+import com.sanedge.common.repository.PagedQuery;
+
 import com.sanedge.common.domain.response.PagedResult;
 import com.sanedge.merchant.domain.requests.FindAllMerchantDocuments;
 import com.sanedge.merchant.entity.MerchantDocument;
@@ -27,9 +29,7 @@ public class MerchantDocumentQueryRepository implements PanacheRepository<Mercha
         var panacheQuery = find(query, Sort.ascending("documentId"), searchKeyword)
                 .page(pageIndex, req.getPageSize());
 
-        return Uni.combine().all().unis(panacheQuery.list(), panacheQuery.count())
-                .asTuple()
-                .map(tuple -> new PagedResult<>(tuple.getItem1(), tuple.getItem2().intValue()));
+        return PagedQuery.fetch(panacheQuery);
     }
 
     public Uni<PagedResult<MerchantDocument>> findActiveDocuments(FindAllMerchantDocuments req) {
@@ -50,9 +50,7 @@ public class MerchantDocumentQueryRepository implements PanacheRepository<Mercha
         var panacheQuery = find(query, Sort.ascending("documentId"), searchKeyword)
                 .page(pageIndex, req.getPageSize());
 
-        return Uni.combine().all().unis(panacheQuery.list(), panacheQuery.count())
-                .asTuple()
-                .map(tuple -> new PagedResult<>(tuple.getItem1(), tuple.getItem2().intValue()));
+        return PagedQuery.fetch(panacheQuery);
     }
 
     public Uni<PagedResult<MerchantDocument>> findTrashedDocuments(FindAllMerchantDocuments req) {
@@ -73,9 +71,7 @@ public class MerchantDocumentQueryRepository implements PanacheRepository<Mercha
         var panacheQuery = find(query, Sort.descending("documentId"), searchKeyword)
                 .page(pageIndex, req.getPageSize());
 
-        return Uni.combine().all().unis(panacheQuery.list(), panacheQuery.count())
-                .asTuple()
-                .map(tuple -> new PagedResult<>(tuple.getItem1(), tuple.getItem2().intValue()));
+        return PagedQuery.fetch(panacheQuery);
     }
 
     public Uni<MerchantDocument> findDocumentById(Long documentId) {

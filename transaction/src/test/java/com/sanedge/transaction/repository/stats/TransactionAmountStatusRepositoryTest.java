@@ -7,23 +7,26 @@ import org.junit.jupiter.api.Test;
 
 import com.sanedge.transaction.domain.requests.FindTransactionMonthRange;
 
-import io.quarkus.hibernate.reactive.panache.common.WithSession;
 import io.quarkus.test.junit.QuarkusTest;
-import io.quarkus.test.vertx.RunOnVertxContext;
+import io.quarkus.test.TestReactiveTransaction;
+import io.quarkus.test.vertx.UniAsserter;
 import io.smallrye.mutiny.Uni;
 import jakarta.inject.Inject;
+import com.sanedge.common.test.PostgreSqlResource;
+import io.quarkus.test.common.QuarkusTestResource;
 
 @Disabled("Requires PostgreSQL-specific functions; enable after verifying DB compatibility")
 @QuarkusTest
-@RunOnVertxContext
+@QuarkusTestResource(PostgreSqlResource.class)
+@TestReactiveTransaction
 class TransactionAmountStatusRepositoryTest {
 
     @Inject
     TransactionAmountStatusRepository repository;
 
     @Test
-    @WithSession
-    Uni<Void> testFindMonthlyTransactionSuccess_ReturnsTwoMonthsWithZero() {
+    void testFindMonthlyTransactionSuccess_ReturnsTwoMonthsWithZero(UniAsserter asserter) {
+        asserter.execute(() -> {
         FindTransactionMonthRange req = new FindTransactionMonthRange();
         req.setStartYear(2024);
         req.setStartMonth(6);
@@ -40,12 +43,11 @@ class TransactionAmountStatusRepositoryTest {
                     });
                 })
                 .replaceWithVoid();
-    }
+    });}
 
     @Test
-    @WithSession
-    Uni<Void> testFindYearlyTransactionSuccess_ReturnsTwoYearsWithZero() {
-        return repository.findYearlyTransactionSuccess(2024)
+    void testFindYearlyTransactionSuccess_ReturnsTwoYearsWithZero(UniAsserter asserter) {
+        asserter.execute(() -> repository.findYearlyTransactionSuccess(2024)
                 .invoke(result -> {
                     assertThat(result).isNotNull();
                     assertThat(result).hasSize(2);
@@ -54,12 +56,12 @@ class TransactionAmountStatusRepositoryTest {
                         assertThat(year.getTotalAmount()).isZero();
                     });
                 })
-                .replaceWithVoid();
+                .replaceWithVoid());
     }
 
     @Test
-    @WithSession
-    Uni<Void> testFindMonthlyTransactionFailed_ReturnsTwoMonthsWithZero() {
+    void testFindMonthlyTransactionFailed_ReturnsTwoMonthsWithZero(UniAsserter asserter) {
+        asserter.execute(() -> {
         FindTransactionMonthRange req = new FindTransactionMonthRange();
         req.setStartYear(2024);
         req.setStartMonth(6);
@@ -76,12 +78,11 @@ class TransactionAmountStatusRepositoryTest {
                     });
                 })
                 .replaceWithVoid();
-    }
+    });}
 
     @Test
-    @WithSession
-    Uni<Void> testFindYearlyTransactionFailed_ReturnsTwoYearsWithZero() {
-        return repository.findYearlyTransactionFailed(2024)
+    void testFindYearlyTransactionFailed_ReturnsTwoYearsWithZero(UniAsserter asserter) {
+        asserter.execute(() -> repository.findYearlyTransactionFailed(2024)
                 .invoke(result -> {
                     assertThat(result).isNotNull();
                     assertThat(result).hasSize(2);
@@ -90,6 +91,6 @@ class TransactionAmountStatusRepositoryTest {
                         assertThat(year.getTotalAmount()).isZero();
                     });
                 })
-                .replaceWithVoid();
+                .replaceWithVoid());
     }
 }

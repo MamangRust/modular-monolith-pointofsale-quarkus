@@ -2,22 +2,26 @@ package com.sanedge.user.repository;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.util.ArrayList;
+import java.util.List;
+
 import org.junit.jupiter.api.Test;
+import org.hibernate.reactive.mutiny.Mutiny;
 
 import com.sanedge.common.test.PostgreSqlResource;
 import com.sanedge.user.domain.requests.FindAllUsers;
 import com.sanedge.user.entity.User;
 
-import io.quarkus.hibernate.reactive.panache.common.WithSession;
 import io.quarkus.test.common.QuarkusTestResource;
 import io.quarkus.test.junit.QuarkusTest;
-import io.quarkus.test.vertx.RunOnVertxContext;
+import io.quarkus.test.TestReactiveTransaction;
+import io.quarkus.test.vertx.UniAsserter;
 import io.smallrye.mutiny.Uni;
 import jakarta.inject.Inject;
 
 @QuarkusTest
 @QuarkusTestResource(PostgreSqlResource.class)
-@RunOnVertxContext
+@TestReactiveTransaction
 class UserRepositoryTest {
 
     @Inject
@@ -33,232 +37,224 @@ class UserRepositoryTest {
         return userRepository.persist(user).replaceWith(user);
     }
 
+    // A Hibernate Reactive session is not thread-safe, so entities must be
+    // persisted sequentially instead of via Uni.combine().all()/Uni.join().all().
+    private Uni<List<User>> createAndPersistUsers(String... usernames) {
+        Uni<List<User>> chain = Uni.createFrom().item(new ArrayList<User>());
+        for (String username : usernames) {
+            chain = chain.chain(users -> createAndPersistUser(username, username + "@example.com")
+                    .invoke(users::add)
+                    .replaceWith(users));
+        }
+        return chain;
+    }
+
+    private Uni<Void> trashSequentially(List<User> users, int... indices) {
+        Uni<Void> chain = Uni.createFrom().voidItem();
+        for (int index : indices) {
+            User user = users.get(index);
+            chain = chain.chain(() -> userRepository.trash(user.id).replaceWithVoid());
+        }
+        return chain;
+    }
+
+    private Uni<Void> clearSession() {
+        return userRepository.getSession().invoke(Mutiny.Session::clear).replaceWithVoid();
+    }
+
+    private Uni<List<User>> reload(List<User> users) {
+        Uni<List<User>> chain = Uni.createFrom().item(new ArrayList<User>());
+        for (User user : users) {
+            chain = chain.chain(list -> userRepository.findById(Math.toIntExact(user.id))
+                    .invoke(list::add)
+                    .replaceWith(list));
+        }
+        return chain;
+    }
+
     @Test
-    @WithSession
-    Uni<Void> testCreateAndFindById() {
-        return createAndPersistUser("johndoe", "john.doe@example.com")
+    void testCreateAndFindById(UniAsserter asserter) {
+        asserter.execute(() -> createAndPersistUser("johndoe", "john.doe@example.com")
                 .invoke(saved -> {
                     assertThat(saved).isNotNull();
                     assertThat(saved.id).isNotNull();
                     assertThat(saved.getEmail()).isEqualTo("john.doe@example.com");
                 })
-                .chain(saved -> userRepository.findById(Math.toIntExact((Long) saved.id)))
+                .chain(saved -> userRepository.findById(Math.toIntExact(saved.id)))
                 .invoke(found -> {
                     assertThat(found).isNotNull();
                     assertThat(found.getUsername()).isEqualTo("johndoe");
                     assertThat(found.getFirstname()).isEqualTo("First_johndoe");
                 })
-                .replaceWithVoid();
+                .replaceWithVoid());
     }
 
     @Test
-    @WithSession
-    Uni<Void> testFindByEmail() {
-        return createAndPersistUser("janedoe", "jane.doe@example.com")
+    void testFindByEmail(UniAsserter asserter) {
+        asserter.execute(() -> createAndPersistUser("janedoe", "jane.doe@example.com")
                 .chain(ignored -> userRepository.findByEmail("jane.doe@example.com"))
                 .invoke(found -> {
                     assertThat(found).isNotNull();
                     assertThat(found.getUsername()).isEqualTo("janedoe");
                 })
-                .replaceWithVoid();
+                .replaceWithVoid());
     }
 
     @Test
-    @WithSession
-    Uni<Void> testFindByEmailReturnsNullWhenNotFound() {
-        return userRepository.findByEmail("nonexistent@example.com")
+    void testFindByEmailReturnsNullWhenNotFound(UniAsserter asserter) {
+        asserter.execute(() -> userRepository.findByEmail("nonexistent@example.com")
                 .invoke(notFound -> assertThat(notFound).isNull())
-                .replaceWithVoid();
+                .replaceWithVoid());
     }
 
     @Test
-    @WithSession
-    Uni<Void> testFindByIdReturnsNullWhenNotFound() {
-        return userRepository.findById(Integer.MAX_VALUE)
+    void testFindByIdReturnsNullWhenNotFound(UniAsserter asserter) {
+        asserter.execute(() -> userRepository.findById(Integer.MAX_VALUE)
                 .invoke(notFound -> assertThat(notFound).isNull())
-                .replaceWithVoid();
+                .replaceWithVoid());
     }
 
     @Test
-    @WithSession
-    Uni<Void> testFindByUsername() {
-        return createAndPersistUser("alice", "alice@example.com")
+    void testFindByUsername(UniAsserter asserter) {
+        asserter.execute(() -> createAndPersistUser("alice", "alice@example.com")
                 .chain(ignored -> userRepository.findByUsername("alice"))
                 .invoke(found -> {
                     assertThat(found).isNotNull();
                     assertThat(found.getEmail()).isEqualTo("alice@example.com");
                 })
-                .replaceWithVoid();
+                .replaceWithVoid());
     }
 
     @Test
-    @WithSession
-    Uni<Void> testExistsByUsernameAndEmail() {
-        return createAndPersistUser("bob", "bob@example.com")
-                .chain(ignored -> Uni.join().all(
-                        userRepository.existsByUsername("bob"),
-                        userRepository.existsByEmail("bob@example.com"),
-                        userRepository.existsByUsername("notbob"),
-                        userRepository.existsByEmail("notbob@example.com"))
-                        .andCollectFailures())
+    void testExistsByUsernameAndEmail(UniAsserter asserter) {
+        asserter.execute(() -> createAndPersistUser("bob", "bob@example.com")
+                .chain(ignored -> userRepository.existsByUsername("bob")
+                        .chain(r0 -> userRepository.existsByEmail("bob@example.com")
+                                .chain(r1 -> userRepository.existsByUsername("notbob")
+                                        .chain(r2 -> userRepository.existsByEmail("notbob@example.com")
+                                                .map(r3 -> List.of(r0, r1, r2, r3))))))
                 .invoke(results -> {
                     assertThat(results.get(0)).isTrue();
                     assertThat(results.get(1)).isTrue();
                     assertThat(results.get(2)).isFalse();
                     assertThat(results.get(3)).isFalse();
                 })
-                .replaceWithVoid();
+                .replaceWithVoid());
     }
 
     @Test
-    @WithSession
-    Uni<Void> testTrashUser() {
-        return createAndPersistUser("trashme", "trash@example.com")
+    void testTrashUser(UniAsserter asserter) {
+        asserter.execute(() -> createAndPersistUser("trashme", "trash@example.com")
                 .invoke(saved -> assertThat(saved.getDeletedAt()).isNull())
-                .chain(saved -> userRepository.trash((Long) saved.id))
+                .chain(saved -> userRepository.trash(saved.id))
                 .invoke(trashed -> {
                     assertThat(trashed).isNotNull();
                     assertThat(trashed.getDeletedAt()).isNotNull();
                 })
-                .replaceWithVoid();
+                .replaceWithVoid());
     }
 
     @Test
-    @WithSession
-    Uni<Void> testTrashUserReturnsNullIfAlreadyTrashed() {
-        return createAndPersistUser("trashme2", "trash2@example.com")
-                .chain(saved -> userRepository.trash((Long) saved.id)
-                        .chain(ignored -> userRepository.trash((Long) saved.id)))
+    void testTrashUserReturnsNullIfAlreadyTrashed(UniAsserter asserter) {
+        asserter.execute(() -> createAndPersistUser("trashme2", "trash2@example.com")
+                .chain(saved -> userRepository.trash(saved.id)
+                        .chain(ignored -> userRepository.trash(saved.id)))
                 .invoke(trashedAgain -> assertThat(trashedAgain).isNull())
-                .replaceWithVoid();
+                .replaceWithVoid());
     }
 
     @Test
-    @WithSession
-    Uni<Void> testTrashUserReturnsNullIfNotFound() {
-        return userRepository.trash(99999L)
+    void testTrashUserReturnsNullIfNotFound(UniAsserter asserter) {
+        asserter.execute(() -> userRepository.trash(99999L)
                 .invoke(trashed -> assertThat(trashed).isNull())
-                .replaceWithVoid();
+                .replaceWithVoid());
     }
 
     @Test
-    @WithSession
-    Uni<Void> testRestoreUser() {
-        return createAndPersistUser("restoreme", "restore@example.com")
-                .chain(saved -> userRepository.trash((Long) saved.id)
-                        .chain(ignored -> userRepository.restore((Long) saved.id)))
+    void testRestoreUser(UniAsserter asserter) {
+        asserter.execute(() -> createAndPersistUser("restoreme", "restore@example.com")
+                .chain(saved -> userRepository.trash(saved.id)
+                        .chain(ignored -> userRepository.restore(saved.id)))
                 .invoke(restored -> {
                     assertThat(restored).isNotNull();
                     assertThat(restored.getDeletedAt()).isNull();
                 })
-                .replaceWithVoid();
+                .replaceWithVoid());
     }
 
     @Test
-    @WithSession
-    Uni<Void> testRestoreUserReturnsNullIfNotTrashed() {
-        return createAndPersistUser("restoreme2", "restore2@example.com")
-                .chain(saved -> userRepository.restore((Long) saved.id))
+    void testRestoreUserReturnsNullIfNotTrashed(UniAsserter asserter) {
+        asserter.execute(() -> createAndPersistUser("restoreme2", "restore2@example.com")
+                .chain(saved -> userRepository.restore(saved.id))
                 .invoke(restored -> assertThat(restored).isNull())
-                .replaceWithVoid();
+                .replaceWithVoid());
     }
 
     @Test
-    @WithSession
-    Uni<Void> testDeletePermanent() {
-        return createAndPersistUser("deleteme", "delete@example.com")
-                .chain(saved -> userRepository.trash((Long) saved.id)
-                        .chain(ignored -> userRepository.deletePermanent((Long) saved.id))
+    void testDeletePermanent(UniAsserter asserter) {
+        asserter.execute(() -> createAndPersistUser("deleteme", "delete@example.com")
+                .chain(saved -> userRepository.trash(saved.id)
+                        .chain(ignored -> userRepository.deletePermanent(saved.id))
                         .chain(deleted -> {
                             assertThat(deleted).isNotNull();
-                            return userRepository.findById(Math.toIntExact((Long) saved.id));
+                            return userRepository.findById(Math.toIntExact(saved.id));
                         }))
                 .invoke(checkDb -> assertThat(checkDb).isNull())
-                .replaceWithVoid();
+                .replaceWithVoid());
     }
 
     @Test
-    @WithSession
-    Uni<Void> testDeletePermanentFailsIfNotTrashed() {
-        return createAndPersistUser("deleteme2", "delete2@example.com")
-                .chain(saved -> userRepository.deletePermanent((Long) saved.id)
+    void testDeletePermanentFailsIfNotTrashed(UniAsserter asserter) {
+        asserter.execute(() -> createAndPersistUser("deleteme2", "delete2@example.com")
+                .chain(saved -> userRepository.deletePermanent(saved.id)
                         .chain(deleted -> {
                             assertThat(deleted).isNull();
-                            return userRepository.findById(Math.toIntExact((Long) saved.id));
+                            return userRepository.findById(Math.toIntExact(saved.id));
                         }))
                 .invoke(checkDb -> assertThat(checkDb).isNotNull())
-                .replaceWithVoid();
+                .replaceWithVoid());
     }
 
     @Test
-    @WithSession
-    Uni<Void> testRestoreAllDeleted() {
-        return Uni.combine().all()
-                .unis(createAndPersistUser("bulk1", "bulk1@example.com"),
-                        createAndPersistUser("bulk2", "bulk2@example.com"))
-                .asTuple()
-                .chain(tuple -> Uni.join().all(
-                        userRepository.trash(tuple.getItem1().id),
-                        userRepository.trash(tuple.getItem2().id))
-                        .andCollectFailures()
-                        .replaceWith(tuple))
-                .chain(tuple -> userRepository.restoreAllDeleted()
+    void testRestoreAllDeleted(UniAsserter asserter) {
+        asserter.execute(() -> createAndPersistUsers("bulk1", "bulk2")
+                .chain(users -> trashSequentially(users, 0, 1).replaceWith(users))
+                .chain(users -> userRepository.restoreAllDeleted()
                         .chain(result -> {
                             assertThat(result).isTrue();
-                            return Uni.join().all(
-                                    userRepository.findById(Math.toIntExact(tuple.getItem1().id)),
-                                    userRepository.findById(Math.toIntExact(tuple.getItem2().id)))
-                                    .andCollectFailures()
-                                    .replaceWith(tuple);
+                            return clearSession().replaceWith(users);
                         }))
-                .invoke(tuple -> {
-                    assertThat(tuple.getItem1().getDeletedAt()).isNull();
-                    assertThat(tuple.getItem2().getDeletedAt()).isNull();
+                .chain(this::reload)
+                .invoke(users -> {
+                    assertThat(users.get(0).getDeletedAt()).isNull();
+                    assertThat(users.get(1).getDeletedAt()).isNull();
                 })
-                .replaceWithVoid();
+                .replaceWithVoid());
     }
 
     @Test
-    @WithSession
-    Uni<Void> testDeleteAllDeleted() {
-        return Uni.combine().all()
-                .unis(createAndPersistUser("bulkdel1", "bulkdel1@example.com"),
-                        createAndPersistUser("bulkdel2", "bulkdel2@example.com"),
-                        createAndPersistUser("bulkdel3", "bulkdel3@example.com"))
-                .asTuple()
-                .chain(tuple -> Uni.join().all(
-                        userRepository.trash(tuple.getItem1().id),
-                        userRepository.trash(tuple.getItem2().id))
-                        .andCollectFailures()
-                        .replaceWith(tuple))
-                .chain(tuple -> userRepository.deleteAllDeleted()
+    void testDeleteAllDeleted(UniAsserter asserter) {
+        asserter.execute(() -> createAndPersistUsers("bulkdel1", "bulkdel2", "bulkdel3")
+                .chain(users -> trashSequentially(users, 0, 1).replaceWith(users))
+                .chain(users -> userRepository.deleteAllDeleted()
                         .chain(result -> {
                             assertThat(result).isTrue();
-                            return Uni.join().all(
-                                    userRepository.findById(Math.toIntExact(tuple.getItem1().id)),
-                                    userRepository.findById(Math.toIntExact(tuple.getItem2().id)),
-                                    userRepository.findById(Math.toIntExact(tuple.getItem3().id)))
-                                    .andCollectFailures()
-                                    .replaceWith(tuple);
+                            return clearSession().replaceWith(users);
                         }))
-                .invoke(tuple -> {
-                    assertThat(tuple.getItem1()).isNull();
-                    assertThat(tuple.getItem2()).isNull();
-                    assertThat(tuple.getItem3()).isNotNull();
+                .chain(this::reload)
+                .invoke(users -> {
+                    assertThat(users.get(0)).isNull();
+                    assertThat(users.get(1)).isNull();
+                    assertThat(users.get(2)).isNotNull();
                 })
-                .replaceWithVoid();
+                .replaceWithVoid());
     }
 
     @Test
-    @WithSession
-    Uni<Void> testFindActiveUsers() {
-        return Uni.combine().all()
-                .unis(createAndPersistUser("active1", "active1@example.com"),
-                        createAndPersistUser("trashed1", "trashed1@example.com"))
-                .asTuple()
-                .chain(tuple -> userRepository.trash(tuple.getItem2().id)
-                        .replaceWith(tuple))
-                .chain(tuple -> {
+    void testFindActiveUsers(UniAsserter asserter) {
+        asserter.execute(() -> createAndPersistUsers("active1", "trashed1")
+                .chain(users -> trashSequentially(users, 1).replaceWith(users))
+                .chain(users -> {
                     FindAllUsers req = new FindAllUsers();
                     req.setPage(1);
                     req.setPageSize(10);
@@ -269,19 +265,14 @@ class UserRepositoryTest {
                     assertThat(result.getData().get(0).getUsername()).isEqualTo("active1");
                     assertThat(result.getTotalRecords()).isEqualTo(1);
                 })
-                .replaceWithVoid();
+                .replaceWithVoid());
     }
 
     @Test
-    @WithSession
-    Uni<Void> testFindTrashedUsers() {
-        return Uni.combine().all()
-                .unis(createAndPersistUser("trashed2", "trashed2@example.com"),
-                        createAndPersistUser("active2", "active2@example.com"))
-                .asTuple()
-                .chain(tuple -> userRepository.trash(tuple.getItem1().id)
-                        .replaceWith(tuple))
-                .chain(tuple -> {
+    void testFindTrashedUsers(UniAsserter asserter) {
+        asserter.execute(() -> createAndPersistUsers("trashed2", "active2")
+                .chain(users -> trashSequentially(users, 0).replaceWith(users))
+                .chain(users -> {
                     FindAllUsers req = new FindAllUsers();
                     req.setPage(1);
                     req.setPageSize(10);
@@ -291,18 +282,14 @@ class UserRepositoryTest {
                     assertThat(result.getData()).hasSize(1);
                     assertThat(result.getData().get(0).getUsername()).isEqualTo("trashed2");
                 })
-                .replaceWithVoid();
+                .replaceWithVoid());
     }
 
     @Test
-    @WithSession
-    Uni<Void> testFindUsersWithSearchKeyword() {
-        return Uni.join().all(
-                createAndPersistUser("superman", "superman@dc.com"),
-                createAndPersistUser("spiderman", "spiderman@marvel.com"),
-                createAndPersistUser("batman", "batman@dc.com"))
-                .andCollectFailures()
-                .chain(ignored -> {
+    void testFindUsersWithSearchKeyword(UniAsserter asserter) {
+        // "man" matches the firstname of superman and spiderman, but not robin.
+        asserter.execute(() -> createAndPersistUsers("superman", "spiderman", "robin")
+                .chain(users -> {
                     FindAllUsers req = new FindAllUsers();
                     req.setPage(1);
                     req.setPageSize(10);
@@ -313,20 +300,14 @@ class UserRepositoryTest {
                     assertThat(result.getData()).hasSize(2);
                     assertThat(result.getTotalRecords()).isEqualTo(2);
                 })
-                .replaceWithVoid();
+                .replaceWithVoid());
     }
 
     @Test
-    @WithSession
-    Uni<Void> testFindUsersWithPagination() {
-        return Uni.join().all(
-                createAndPersistUser("pageuser1", "pageuser1@example.com"),
-                createAndPersistUser("pageuser2", "pageuser2@example.com"),
-                createAndPersistUser("pageuser3", "pageuser3@example.com"),
-                createAndPersistUser("pageuser4", "pageuser4@example.com"),
-                createAndPersistUser("pageuser5", "pageuser5@example.com"))
-                .andCollectFailures()
-                .chain(ignored -> {
+    void testFindUsersWithPagination(UniAsserter asserter) {
+        asserter.execute(() -> createAndPersistUsers("pageuser1", "pageuser2", "pageuser3",
+                "pageuser4", "pageuser5")
+                .chain(users -> {
                     FindAllUsers reqPage1 = new FindAllUsers();
                     reqPage1.setPage(1);
                     reqPage1.setPageSize(2);
@@ -348,6 +329,6 @@ class UserRepositoryTest {
                                         page1.getData().get(1).getUsername());
                             });
                 })
-                .replaceWithVoid();
+                .replaceWithVoid());
     }
 }
